@@ -1,6 +1,17 @@
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import Trophy3D from '../components/Trophy3D'
 import Countdown from '../components/Countdown'
+import useAuth from '../hooks/useAuth'
+
+/**
+ * useVoteNav — helper que decide o destino do clique em qualquer botão "Votar".
+ * Se autenticado → /votar; senão → /login.
+ */
+function useVoteNav() {
+  const { isAuthenticated } = useAuth()
+  const navigate = useNavigate()
+  return () => navigate(isAuthenticated ? '/votar' : '/login')
+}
 
 // Mock categories data — replace with /api/categories when API is ready
 const MOCK_CATEGORIES = [
@@ -39,6 +50,7 @@ const MOCK_CATEGORIES = [
 ]
 
 function CategoryCard({ category }) {
+  const goVote = useVoteNav()
   return (
     <div className="group relative rounded-2xl bg-surface-container/70 backdrop-blur-xl p-8 flex flex-col justify-between shadow-[0_12px_32px_rgba(0,0,0,0.5)] hover:shadow-[0_0_30px_rgba(212,175,55,0.18)] transition-all duration-300 border border-transparent hover:border-primary/10">
       {/* Gold top accent line */}
@@ -69,18 +81,20 @@ function CategoryCard({ category }) {
           <span className="material-symbols-outlined text-[16px] text-primary">check_circle</span>
           {category.favorite}
         </span>
-        <Link
-          to="/votacao"
+        <button
+          type="button"
+          onClick={goVote}
           className="text-primary hover:text-primary-fixed font-sans font-semibold text-title-md inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform"
         >
           Votar <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-        </Link>
+        </button>
       </div>
     </div>
   )
 }
 
 function Header() {
+  const goVote = useVoteNav()
   return (
     <header className="fixed top-0 w-full z-50 bg-surface-container-lowest/80 backdrop-blur-xl shadow-[0_12px_32px_-4px_rgba(0,0,0,0.6),0_0_24px_0_rgba(212,175,55,0.08)]">
       <div className="h-20 max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between gap-6">
@@ -103,7 +117,7 @@ function Header() {
         <nav className="hidden md:flex items-center gap-space-lg">
           {[
             { href: '#inicio', label: 'Início' },
-            { href: '/votacao', label: 'Votação' },
+            { href: '#categorias', label: 'Categorias' },
             { href: '#cerimonia', label: 'A Cerimônia' },
             { href: '#resultados', label: 'Resultados' },
           ].map(({ href, label }) => (
@@ -115,16 +129,24 @@ function Header() {
               {label}
             </a>
           ))}
+          <button
+            type="button"
+            onClick={goVote}
+            className="font-sans text-body-md text-on-surface-variant hover:text-primary transition-colors"
+          >
+            Votação
+          </button>
         </nav>
 
         {/* CTA actions */}
         <div className="flex items-center gap-space-md">
-          <Link
-            to="/votacao"
+          <button
+            type="button"
+            onClick={goVote}
             className="hidden sm:inline-flex items-center justify-center px-space-lg py-space-sm rounded-lg bg-primary hover:bg-primary-container text-on-primary font-sans font-semibold text-body-md transition-all duration-300 shadow-[0_0_20px_rgba(212,175,55,0.45)] hover:scale-[1.02]"
           >
             Votar Agora
-          </Link>
+          </button>
           <a
             href="/admin"
             title="Acesso Restrito da Academia"
@@ -214,17 +236,19 @@ function HeroSection() {
 }
 
 function CTASection() {
+  const goVote = useVoteNav()
   return (
     <section className="w-full px-6 lg:px-12 py-14 flex flex-col items-center text-center">
       <div className="flex flex-col sm:flex-row items-center justify-center gap-space-md w-full max-w-md mx-auto mb-6">
         {/* Primary CTA */}
-        <Link
-          to="/votacao"
+        <button
+          type="button"
+          onClick={goVote}
           className="w-full sm:w-auto inline-flex items-center justify-center gap-space-sm px-8 py-4 rounded-xl bg-gradient-to-r from-primary-fixed to-primary text-on-primary font-sans font-bold text-title-md tracking-wide transition-all duration-300 shadow-[0_0_30px_rgba(212,175,55,0.45)] hover:shadow-[0_0_45px_rgba(212,175,55,0.7)] hover:scale-105 active:scale-95 group"
         >
           <span>VOTAR AGORA NOS SEUS AMIGOS</span>
           <span className="material-symbols-outlined group-hover:translate-x-1.5 transition-transform text-[20px]">arrow_forward</span>
-        </Link>
+        </button>
 
         {/* Ghost CTA */}
         <a
@@ -277,6 +301,7 @@ function CategoriesSection() {
 }
 
 function CeremonySection() {
+  const goVote = useVoteNav()
   return (
     <section id="cerimonia" className="w-full px-6 lg:px-12 py-16 bg-surface-container-lowest relative">
       <div className="max-w-7xl mx-auto rounded-3xl bg-surface-container/90 backdrop-blur-2xl p-8 sm:p-12 shadow-[0_20px_50px_rgba(0,0,0,0.7)] relative overflow-hidden">
@@ -332,13 +357,14 @@ function CeremonySection() {
             <p className="font-sans text-body-sm text-on-surface-variant mb-6">
               A ata da Academia só aceita votos até o sino das 21:00h. Não deixe o amigo inimputável vencer sem oposição!
             </p>
-            <Link
-              to="/votacao"
+            <button
+              type="button"
+              onClick={goVote}
               className="w-full inline-flex items-center justify-center gap-space-xs px-6 py-3.5 rounded-xl bg-primary text-on-primary font-sans font-bold text-title-md shadow-[0_0_20px_rgba(212,175,55,0.35)] hover:scale-105 transition-all"
             >
               <span>Abrir Cédula Oficial</span>
               <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-            </Link>
+            </button>
           </div>
         </div>
       </div>
