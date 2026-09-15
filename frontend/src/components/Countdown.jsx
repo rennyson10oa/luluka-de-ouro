@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react'
 
-// MOCK: Countdown target is set to 4 days from now.
-// When the real API is ready, replace this with: fetch('/api/settings').then(r => r.json()).then(d => new Date(d.reveal_at))
-function getMockTargetDate() {
+// MOCK: prioriza o agendamento definido no Painel Admin (chave pg_reveal_at,
+// persistida por AdminPanel). Sem agendamento, cai num mock de 4 dias à frente.
+// Quando a API real existir, trocar por: fetch('/api/settings') → d.reveal_at
+function getTargetDate() {
+  try {
+    const saved = localStorage.getItem('pg_reveal_at')
+    if (saved) {
+      const d = new Date(saved)
+      if (!Number.isNaN(d.getTime()) && d.getTime() > Date.now()) return d
+    }
+  } catch {
+    // storage indisponível — segue para o mock
+  }
   return new Date(Date.now() + (4 * 24 * 3600 + 18 * 3600 + 42 * 60 + 15) * 1000)
 }
 
@@ -29,7 +39,7 @@ function CountdownUnit({ value, label }) {
 
 export default function Countdown() {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
-  const [targetDate] = useState(getMockTargetDate)
+  const [targetDate] = useState(getTargetDate)
 
   useEffect(() => {
     function tick() {

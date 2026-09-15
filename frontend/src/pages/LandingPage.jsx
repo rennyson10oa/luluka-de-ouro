@@ -1,17 +1,10 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
+import Header from '../components/Header'
+import { Footer } from '../components/Footer'
+import useVoteNav from '../hooks/useVoteNav'
 import Trophy3D from '../components/Trophy3D'
 import Countdown from '../components/Countdown'
-import useAuth from '../hooks/useAuth'
-
-/**
- * useVoteNav — helper que decide o destino do clique em qualquer botão "Votar".
- * Se autenticado → /votar; senão → /login.
- */
-function useVoteNav() {
-  const { isAuthenticated } = useAuth()
-  const navigate = useNavigate()
-  return () => navigate(isAuthenticated ? '/votar' : '/login')
-}
 
 // Mock categories data — replace with /api/categories when API is ready
 const MOCK_CATEGORIES = [
@@ -90,76 +83,6 @@ function CategoryCard({ category }) {
         </button>
       </div>
     </div>
-  )
-}
-
-function Header() {
-  const goVote = useVoteNav()
-  return (
-    <header className="fixed top-0 w-full z-50 bg-surface-container-lowest/80 backdrop-blur-xl shadow-[0_12px_32px_-4px_rgba(0,0,0,0.6),0_0_24px_0_rgba(212,175,55,0.08)]">
-      <div className="h-20 max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between gap-6">
-        {/* Logo */}
-        <div className="flex items-center gap-space-md">
-          <div className="w-11 h-11 rounded-xl bg-surface-container-high flex items-center justify-center shadow-[0_0_16px_rgba(212,175,55,0.25)]">
-            <span className="material-symbols-outlined text-primary text-[24px]">trophy</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="font-serif font-bold text-headline-sm text-primary tracking-wide leading-none">
-              PRÊMIOS DO GRUPO 2025
-            </span>
-            <span className="font-sans font-bold text-label-sm text-secondary uppercase tracking-widest mt-1">
-              A Gala Suprema da Zoeira
-            </span>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="hidden md:flex items-center gap-space-lg">
-          {[
-            { href: '#inicio', label: 'Início' },
-            { href: '#categorias', label: 'Categorias' },
-            { href: '#cerimonia', label: 'A Cerimônia' },
-            { href: '#resultados', label: 'Resultados' },
-          ].map(({ href, label }) => (
-            <a
-              key={href}
-              href={href}
-              className="font-sans text-body-md text-on-surface-variant hover:text-on-surface transition-colors"
-            >
-              {label}
-            </a>
-          ))}
-          <button
-            type="button"
-            onClick={goVote}
-            className="font-sans text-body-md text-on-surface-variant hover:text-primary transition-colors"
-          >
-            Votação
-          </button>
-        </nav>
-
-        {/* CTA actions */}
-        <div className="flex items-center gap-space-md">
-          <button
-            type="button"
-            onClick={goVote}
-            className="hidden sm:inline-flex items-center justify-center px-space-lg py-space-sm rounded-lg bg-primary hover:bg-primary-container text-on-primary font-sans font-semibold text-body-md transition-all duration-300 shadow-[0_0_20px_rgba(212,175,55,0.45)] hover:scale-[1.02]"
-          >
-            Votar Agora
-          </button>
-          <a
-            href="/admin"
-            title="Acesso Restrito da Academia"
-            className="w-9 h-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-outline hover:text-primary flex items-center justify-center transition-colors"
-          >
-            <span className="material-symbols-outlined text-[18px]">lock</span>
-          </a>
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_10px_rgba(212,175,55,0.3)]">
-            <span className="material-symbols-outlined text-on-primary text-[18px]">person</span>
-          </div>
-        </div>
-      </div>
-    </header>
   )
 }
 
@@ -372,40 +295,22 @@ function CeremonySection() {
   )
 }
 
-function Footer() {
-  return (
-    <footer className="w-full bg-surface-container-lowest py-space-xl shadow-[0_-1px_12px_rgba(0,0,0,0.5)]">
-      <div className="max-w-7xl mx-auto px-6 lg:px-12 flex flex-col md:flex-row items-center justify-between gap-space-lg">
-        {/* Brand */}
-        <div className="flex flex-col items-center md:items-start text-center md:text-left">
-          <div className="flex items-center gap-space-xs text-primary font-serif font-bold text-headline-sm">
-            <span className="material-symbols-outlined text-[20px]">stars</span>
-            <span>Academia das Artes e Zoações do Grupo</span>
-          </div>
-          <p className="font-sans text-body-sm text-on-surface-variant mt-1 max-w-md">
-            Celebrando a mediocridade épica, áudios intermináveis de WhatsApp e prints fora de contexto com a máxima pompa e circunstância.
-          </p>
-        </div>
-
-        {/* Server status (mock) */}
-        <div className="flex items-center gap-space-xs bg-surface-container-low px-space-md py-space-xs rounded-full">
-          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          <span className="font-sans font-bold text-label-sm text-secondary">Servidor da Gala: 100% Calmo &amp; Alinhado</span>
-        </div>
-
-        {/* Legal */}
-        <div className="font-sans text-body-sm text-outline text-center md:text-right">
-          <p>© 2025 Prêmios do Grupo.</p>
-          <p className="font-sans font-bold text-label-sm text-outline mt-0.5">
-            Nenhum admin foi ferido durante a contagem de votos.
-          </p>
-        </div>
-      </div>
-    </footer>
-  )
-}
-
 export default function LandingPage() {
+  const location = useLocation()
+
+  // Support for cross-page anchor navigation (e.g., /#erimonia from another page)
+  useEffect(() => {
+    if (location.hash) {
+      const timer = setTimeout(() => {
+        const el = document.querySelector(location.hash)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' })
+        }
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [location.hash])
+
   return (
     <div className="min-h-screen flex flex-col bg-surface text-on-surface">
       <Header />

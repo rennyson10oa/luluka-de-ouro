@@ -164,5 +164,7 @@ URL do banco, etc.).
 
 ## Documentação
 
-- [`docs/00-visao-geral.md`](docs/00-visao-geral.md) — Visão geral e stack
-- [`docs/01-arquitetura.md`](docs/01-arquitetura.md) — Arquitetura e estrutura
+O índice completo está em [`docs/README.md`](docs/README.md).
+
+- [`docs/produto/00-visao-geral.md`](docs/produto/00-visao-geral.md) — Visão geral e stack
+- [`docs/arquitetura/01-arquitetura.md`](docs/arquitetura/01-arquitetura.md) — Arquitetura e estrutura

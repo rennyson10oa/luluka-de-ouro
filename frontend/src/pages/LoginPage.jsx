@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import useAuth from '../hooks/useAuth'
+import Header from '../components/Header'
+import { FooterAuth } from '../components/Footer'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -30,7 +32,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative w-full min-h-screen flex items-center justify-center px-4 py-10 overflow-hidden bg-surface">
+    <div className="min-h-screen flex flex-col bg-surface">
+      <Header />
+      <main className="flex-grow pt-24 pb-8 flex items-center justify-center">
+      <div className="relative w-full flex items-center justify-center px-4 py-10 overflow-hidden">
       {/* Efeitos de iluminação ambiente e vinheta da gala */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-primary/10 rounded-full blur-[140px]" />
@@ -235,6 +240,9 @@ export default function LoginPage() {
           <a href="#" className="font-sans text-body-sm hover:text-secondary transition-colors">Tribunal de Recursos</a>
         </div>
       </div>
+      </div>
+      </main>
+      <FooterAuth />
     </div>
   )
 }

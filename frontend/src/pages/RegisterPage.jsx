@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import useAuth from '../hooks/useAuth'
+import Header from '../components/Header'
+import { FooterAuth } from '../components/Footer'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -32,7 +34,10 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="relative w-full min-h-screen flex items-center justify-center px-4 py-10 overflow-hidden bg-surface">
+    <div className="min-h-screen flex flex-col bg-surface">
+      <Header />
+      <main className="flex-grow pt-24 pb-8 flex items-center justify-center">
+      <div className="relative w-full flex items-center justify-center px-4 py-10 overflow-hidden">
       {/* Efeitos de iluminação ambiente e vinheta da gala */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-gradient-to-tr from-primary-container/15 via-primary/10 to-transparent rounded-full blur-[120px] opacity-70" />
@@ -258,6 +263,9 @@ export default function RegisterPage() {
           <span>ACADEMIA DO GRUPO • 2025</span>
         </div>
       </div>
+      </div>
+      </main>
+      <FooterAuth />
     </div>
   )
 }

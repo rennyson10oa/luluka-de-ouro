@@ -3,7 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF, Environment, Float } from '@react-three/drei'
 import * as THREE from 'three'
 
-const GLB_PATH = '/assets/davy-jones-trofeu.glb'
+const GLB_PATH = '/assets/davy-jones-lite.glb'
 
 // Pre-load the model so it's ready when the component mounts
 useGLTF.preload(GLB_PATH)
