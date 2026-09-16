@@ -110,7 +110,15 @@ export default function Header() {
             <button
               type="button"
               title={isAuthenticated ? `Perfil de @${user?.username}` : 'Entrar na Gala'}
-              onClick={() => navigate(isAuthenticated ? '/perfil' : '/login')}
+              onClick={() => {
+                // Deslogado, o clique expressa intenção de ver o perfil —
+                // guarda o destino para o login devolver o usuário a /perfil.
+                if (isAuthenticated) {
+                  navigate('/perfil')
+                } else {
+                  navigate('/login', { state: { from: '/perfil' } })
+                }
+              }}
               className="w-9 h-9 rounded-full bg-surface-container border border-primary-container/40 flex items-center justify-center hover:border-primary-container transition-colors relative"
             >
               <span className="material-symbols-outlined text-xl text-on-surface-variant">person</span>

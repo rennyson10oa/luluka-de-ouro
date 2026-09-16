@@ -42,7 +42,7 @@ export default function ProfilePage() {
   // ---- Guard de auth ----
   if (!isAuthenticated) {
     if (!hasStoredSession()) {
-      return <Navigate to="/login" replace />
+      return <Navigate to="/login" replace state={{ from: '/perfil' }} />
     }
     // Sesión guardada pero useAuth aún hidratando (1er render tras navegación).
     return (

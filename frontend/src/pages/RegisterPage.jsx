@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../hooks/useAuth'
 import Header from '../components/Header'
 import { FooterAuth } from '../components/Footer'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { register } = useAuth()
 
   const [username, setUsername] = useState('')
@@ -27,7 +28,9 @@ export default function RegisterPage() {
     const res = await register(username.trim(), password)
     setSubmitting(false)
     if (res.success) {
-      navigate('/votar')
+      // Mesma convenção do login: devolve o usuário ao destino original
+      // que motivou o registro (ou à urna, no fluxo padrão).
+      navigate(location.state?.from ?? '/votar', { replace: true })
     } else {
       setError(res.error || 'Não foi possível criar a conta')
     }

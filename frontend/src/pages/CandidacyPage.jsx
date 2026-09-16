@@ -53,7 +53,7 @@ export default function CandidacyPage() {
   // ---- Guard de auth ----
   if (!isAuthenticated) {
     if (!hasStoredSession()) {
-      return <Navigate to="/login" replace />
+      return <Navigate to="/login" replace state={{ from: '/candidaturas' }} />
     }
     // Sesión guardada pero useAuth aún hidratando (1er render tras navegación).
     return (

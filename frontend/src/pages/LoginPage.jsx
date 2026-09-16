@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../hooks/useAuth'
 import Header from '../components/Header'
 import { FooterAuth } from '../components/Footer'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
 
   const [username, setUsername] = useState('')
@@ -23,7 +24,9 @@ export default function LoginPage() {
     const res = await login(username.trim(), password)
     setSubmitting(false)
     if (res.success) {
-      navigate('/votar')
+      // Volta ao destino original que motivou o login (ex.: /perfil via
+      // avatar do header). Sem destino guardado, o fluxo padrão é a urna.
+      navigate(location.state?.from ?? '/votar', { replace: true })
     } else {
       setError(res.error || 'Usuário ou senha incorretos')
       setShake(true)

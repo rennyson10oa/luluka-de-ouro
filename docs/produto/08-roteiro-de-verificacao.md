@@ -26,7 +26,7 @@ python -m uvicorn backend.main:app --port 8000
 cd frontend && npm run dev
 ```
 
-Usuários do seed (senha `123`): `joao`, `maria`, `carlos`, `ana`, `pedro`, `julia`.
+Usuários do seed (senha `123`): `joaorei`, `maria`, `carlos`, `ana`, `pedro`, `julia`.
 
 **Chaves de localStorage gerenciadas pelo app** (úteis para inspecionar/resetar):
 
@@ -55,7 +55,7 @@ manualmente todas as chaves `pg_*` no DevTools.
 - [ ] **1.3** Contagem regressiva exibe valores decrescendo a cada segundo.
 - [ ] **1.4** Deslogado: clicar em "Votar Agora" (header, CTA central e "Abrir Cédula Oficial") e "Votar" num card de categoria → todos navegam para `/login`.
 - [ ] **1.5** Logado: os mesmos botões navegam para `/votar`.
-- [ ] **1.6** Âncoras internas funcionam ("A Cerimônia" rola até a seção; vindo de outra rota, `/#cerimonia` rola suavemente).
+- [ ] **1.6** Âncoras: ghost CTA "Ver Categorias & Indicados" rola suavemente até `#categorias`; digitando `/#cerimonia` (vindo de outra rota) a seção da cerimônia é rolada suavemente via hash handler da landing. Obs.: o item "A Cerimônia" do header navega para `/reveal`, não é âncora.
 - [ ] **1.7** Em 360px: sem scroll horizontal; hero, countdown e cards empilham.
 
 **Status:** `____`
@@ -67,13 +67,13 @@ manualmente todas as chaves `pg_*` no DevTools.
 **Objetivo:** criação de conta com validações locais + unicidade no banco.
 
 - [ ] **2.1** Sem backend rodando: submit exibe "Cartório indisponível..." (mensagem de rede).
-- [ ] **2.2** Username com menos de 3 caracteres: feedback "Mínimo de 3 caracteres"; com 3+: "disponível para nomeação".
-- [ ] **2.3** Senhas diferentes: "As senhas ainda não coincidem" (vermelho); iguais: "Senhas conferem! Voto garantido" (verde).
-- [ ] **2.4** Botão "Criar conta" desabilitado até: username ≥3, senhas conferem, termos aceito.
-- [ ] **2.5** Registro válido → navega para `/votar`; `pg_token` e `pg_user` existem no localStorage.
-- [ ] **2.6** **Duplicado:** registrar username já existente (ex.: `joao`) → erro "Este nome de usuário já foi registrado em cartório".
-- [ ] **2.7** Toggle "Entrar" no topo leva a `/login` (ordem correta das abas: Entrar | Criar Conta).
-- [ ] **2.8** Toggle de visibilidade de senha funciona em ambos os campos de senha.
+- [x] **2.2** Username com menos de 3 caracteres: feedback "Mínimo de 3 caracteres"; com 3+: "disponível para nomeação".
+- [x] **2.3** Senhas diferentes: "As senhas ainda não coincidem" (vermelho); iguais: "Senhas conferem! Voto garantido" (verde).
+- [x] **2.4** Botão "Criar conta" desabilitado até: username ≥3, senhas conferem, termos aceito.
+- [x] **2.5** Registro válido → navega para `/votar`; `pg_token` e `pg_user` existem no localStorage.
+- [x] **2.6** **Duplicado:** registrar username já existente (ex.: `maria`) → erro "Este nome de usuário já foi registrado em cartório".
+- [x] **2.7** Toggle "Entrar" no topo leva a `/login` (ordem correta das abas: Entrar | Criar Conta).
+- [x] **2.8** Toggle de visibilidade de senha funciona em ambos os campos de senha.
 
 **Status:** `____`
 
@@ -83,13 +83,14 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** autenticação, persistência de sessão e tratamento de erros.
 
-- [ ] **3.1** Credenciais válidas (seed: `joao` / `123`) → navega para `/votar`; `pg_token` salvo.
+- [ ] **3.1** Credenciais válidas (seed: `joaorei` / `123`) → navega para `/votar`; `pg_token` salvo.
 - [ ] **3.2** Senha errada → banner "Usuário ou senha incorretos" + **animação de shake** no card.
 - [ ] **3.3** Campos vazios → submit bloqueado (validação nativa).
 - [ ] **3.4** Recarregar a página com sessão ativa → continua logado (hidratação via `GET /api/me` com `pg_token`).
 - [ ] **3.5** Corromper `pg_token` no DevTools e recarregar → sessão limpa silenciosamente (volta a deslogado, sem crash).
 - [ ] **3.6** "Esqueceu a senha? Chame o admin" → alert humorístico.
 - [ ] **3.7** Sessão mock legada: com `pg_user` presente mas **sem** `pg_token`, recarregar → deslogado (invalidação correta).
+- [ ] **3.8** **Retorno ao destino original (redirect-after-login):** deslogado, clicar no avatar do header → `/login`; logar → deve cair em `/perfil` (não em `/votar`). Repetir saindo de `/votar` (via botão Votação) e de `/candidaturas` direto na URL → login devolve a cada origem. Sem origem (acesso direto a `/login`) → fluxo padrão `/votar`.
 
 **Status:** `____`
 
@@ -259,6 +260,10 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 | ID do teste | Tela | Descrição do problema | Severidade | Status |
 |-------------|------|----------------------|------------|--------|
-| | | | | |
+| 1.2 | Landing | `Trophy3D.jsx` (hero) aplica `scale`/`position` direto na cena cacheada do `useGLTF`, sem clone — mesmo padrão do bug do ADR-0001. Seguro hoje (instância única, transform constante), mas quebra se o componente for reutilizado com props diferentes. Refatorar junto com o ADR-0001. | POLISH | Aberto |
+| 2.2 | Registro | `UserCreate` no backend não validava tamanho do username (aceitava 1+ char se o frontend fosse burlado; `UserUpdate` já tinha `min_length=3`). **Corrigido durante a verificação:** `Field(min_length=3, max_length=30)` adicionado, uvicorn reiniciado, retestado via curl (curto → 422). | MINOR | Corrigido |
+| 2.6 | Doc | Exemplo do teste usava `joao`, que não existe no seed (o username real é `joaorei`). Causou falso-negativo na primeira rodada do teste. **Doc corrigido** (também na lista do seed e no teste 3.1). | MINOR | Corrigido |
+| 3.8 | Login | Login/registro sempre levavam a `/votar`, ignorando o destino que motivou o acesso (ex.: clicar no avatar deslogado → login → cair na urna em vez do perfil). **Corrigido:** convenção `location.state.from` em 7 pontos — `useVoteNav` (from /votar), avatar do Header (from /perfil), guards de VotePage/ProfilePage/CandidacyPage, e `LoginPage`/`RegisterPage` consomem `state?.from` com fallback `/votar` + `replace: true`. Build OK. | MAJOR | Corrigido |
+| — | Código | Comentários em espanhol em arquivos legados do @dev (`useAuth.jsx`, `VotePage.jsx`, `ProfilePage.jsx`, `CandidacyPage.jsx`, `schemas.py`). Convenção do projeto é pt-BR. Consolidar numa passada de limpeza. | POLISH | Aberto |
 
 Severidade sugerida: `BLOQUEIO` (impede o fluxo), `MAJOR` (funcionalidade errada), `MINOR` (visual/texto), `POLISH` (melhoria).

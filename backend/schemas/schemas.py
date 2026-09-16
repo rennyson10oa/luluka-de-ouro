@@ -7,8 +7,10 @@ class Token(BaseModel):
     token_type: str
 
 class UserCreate(BaseModel):
-    username: str
-    password: str
+    # Espelha a validação do frontend (mín. 3 chars) — defesa em profundidade
+    # para quem burlar o formulário e chamar a API direto.
+    username: str = Field(..., min_length=3, max_length=30)
+    password: str = Field(..., min_length=1)
 
 class UserLogin(BaseModel):
     username: str
