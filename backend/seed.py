@@ -28,16 +28,27 @@ def seed_db():
             db.add(models.Category(**cat))
     db.commit()
 
-    # Create Users
-    users_data = ["joao", "maria", "carlos", "ana", "pedro", "julia"]
+    # Create Users (con vulgo de exibição na gala)
+    users_data = [
+        ("joao", "@ReiDoZap"),
+        ("maria", "@DonaDaAta"),
+        ("carlos", "@FiscalDeChurras"),
+        ("ana", "@MestreDoSticker"),
+        ("pedro", "@CavaleiroDaZoeira"),
+        ("julia", "@VovoDoGrupo"),
+    ]
     user_ids = []
-    for uname in users_data:
+    for uname, vulgo in users_data:
         user = db.query(models.User).filter_by(username=uname).first()
         if not user:
-            user = models.User(username=uname, password_hash=get_password_hash("123"))
+            user = models.User(username=uname, password_hash=get_password_hash("123"), vulgo=vulgo)
             db.add(user)
             db.commit()
             db.refresh(user)
+        elif not user.vulgo:
+            # Usuário já existente sem vulgo → atualiza (idempotente, não recria).
+            user.vulgo = vulgo
+            db.commit()
         user_ids.append(user.id)
     
     # Create Candidacies

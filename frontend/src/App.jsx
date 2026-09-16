@@ -4,6 +4,9 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import VotePage from './pages/VotePage'
 import AdminPage from './pages/AdminPage'
+import ResultsPage from './pages/ResultsPage'
+import ProfilePage from './pages/ProfilePage'
+import CandidacyPage from './pages/CandidacyPage'
 
 function App() {
   return (
@@ -13,6 +16,9 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/votar" element={<VotePage />} />
+        <Route path="/perfil" element={<ProfilePage />} />
+        <Route path="/candidaturas" element={<CandidacyPage />} />
+        <Route path="/resultados" element={<ResultsPage />} />
         <Route path="/admin" element={<AdminPage />} />
       </Routes>
     </BrowserRouter>

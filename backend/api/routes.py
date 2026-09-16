@@ -46,6 +46,34 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
 def read_users_me(current_user: models.User = Depends(deps.get_current_user)):
     return current_user
 
+@router.patch("/users/me", response_model=schemas.ProfileUpdateResponse)
+def update_profile(update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(deps.get_current_user)):
+    # Normalização: apenas strip de espaços (o frontend normaliza o resto).
+    username = update.username.strip() if update.username is not None else None
+    vulgo = update.vulgo.strip() if update.vulgo is not None else None
+
+    # Se o username mudou, o JWT atual (sub=username antigo) fica stale.
+    # Emitimos um token novo na resposta; o frontend o troca imediatamente.
+    username_changed = username is not None and username != current_user.username
+
+    updated = crud.update_user_profile(db, current_user, username=username, vulgo=vulgo)
+    if updated is None:
+        # Username já em uso por outro usuário.
+        raise HTTPException(status_code=400, detail="Username already registered")
+
+    access_token = None
+    if username_changed:
+        access_token = security.create_access_token(data={"sub": updated.username, "role": "user"})
+
+    return {"user": updated, "access_token": access_token}
+
+@router.patch("/users/me/password")
+def update_password(payload: schemas.PasswordChange, db: Session = Depends(get_db), current_user: models.User = Depends(deps.get_current_user)):
+    if not security.verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    crud.update_user_password(db, current_user, payload.new_password)
+    return {"status": "success"}
+
 @router.get("/categories", response_model=list[schemas.CategoryResponse])
 def get_categories(db: Session = Depends(get_db)):
     categories = crud.get_categories(db)

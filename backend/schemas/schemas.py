@@ -17,7 +17,22 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
+    vulgo: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+class UserUpdate(BaseModel):
+    # Campos opcionales: solo se aplican los que vienen en el body.
+    username: Optional[str] = Field(None, min_length=3)
+    vulgo: Optional[str] = Field(None, max_length=40)
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=4)
+
+class ProfileUpdateResponse(BaseModel):
+    user: UserResponse
+    # Token presente SOLO si el username cambió (el JWT anterior queda stale).
+    access_token: Optional[str] = None
 
 class StateResponse(BaseModel):
     votacao_aberta: bool

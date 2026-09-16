@@ -54,6 +54,13 @@ export default function Header() {
             Início
           </Link>
 
+          <Link
+            to="/candidaturas"
+            className={navClasses(currentPath === '/candidaturas')}
+          >
+            Candidaturas
+          </Link>
+
           {/* Votação — botão auth-aware */}
           <button
             type="button"
@@ -71,8 +78,8 @@ export default function Header() {
           </Link>
 
           <Link
-            to="/#resultados"
-            className={navClasses(currentPath === '/#resultados')}
+            to="/resultados"
+            className={navClasses(currentPath === '/resultados')}
           >
             Galeria de Resultados
           </Link>
@@ -103,7 +110,7 @@ export default function Header() {
             <button
               type="button"
               title={isAuthenticated ? `Perfil de @${user?.username}` : 'Entrar na Gala'}
-              onClick={() => { if (!isAuthenticated) navigate('/login') }}
+              onClick={() => navigate(isAuthenticated ? '/perfil' : '/login')}
               className="w-9 h-9 rounded-full bg-surface-container border border-primary-container/40 flex items-center justify-center hover:border-primary-container transition-colors relative"
             >
               <span className="material-symbols-outlined text-xl text-on-surface-variant">person</span>

@@ -18,6 +18,26 @@ def create_user(db: Session, user: schemas.UserCreate):
     db.refresh(db_user)
     return db_user
 
+def update_user_profile(db: Session, user, username=None, vulgo=None):
+    # Aplica apenas os campos não-None.
+    if username is not None and username != user.username:
+        # Checa unicidade ANTES: username já em uso por outro id → None.
+        existing = db.query(models.User).filter(models.User.username == username).first()
+        if existing and existing.id != user.id:
+            return None
+        user.username = username
+    if vulgo is not None:
+        user.vulgo = vulgo
+    db.commit()
+    db.refresh(user)
+    return user
+
+def update_user_password(db: Session, user, new_password: str):
+    user.password_hash = get_password_hash(new_password)
+    db.commit()
+    db.refresh(user)
+    return user
+
 def get_categories(db: Session):
     return db.query(models.Category).order_by(models.Category.reveal_order).all()
 

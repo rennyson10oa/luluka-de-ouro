@@ -75,14 +75,14 @@ export function Footer() {
               Acesso aos Salões
             </h4>
             <ul className="space-y-1.5 text-xs text-on-surface-variant">
-              <li><a href="/#candidaturas" className="hover:text-on-surface transition-colors">🏛️ Urna de Candidaturas</a></li>
+              <li><Link to="/candidaturas" className="hover:text-on-surface transition-colors">🏛️ Urna de Candidaturas</Link></li>
               <li>
                 <a href="/votar" onClick={handleVoteClick} className="hover:text-on-surface transition-colors">
                   ⚡ Cédula de Votação Oficial
                 </a>
               </li>
               <li><a href="/#cerimonia" className="hover:text-on-surface transition-colors">🍾 A Cerimônia de Reveal</a></li>
-              <li><a href="/#resultados" className="hover:text-on-surface transition-colors">🏆 Galeria de Imortais</a></li>
+              <li><Link to="/resultados" className="hover:text-on-surface transition-colors">🏆 Galeria de Imortais</Link></li>
               <li><Link to="/admin" className="hover:text-on-surface transition-colors">🔑 Painel dos Administradores</Link></li>
             </ul>
           </div>
