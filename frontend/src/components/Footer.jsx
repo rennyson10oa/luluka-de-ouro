@@ -81,7 +81,7 @@ export function Footer() {
                   ⚡ Cédula de Votação Oficial
                 </a>
               </li>
-              <li><a href="/#cerimonia" className="hover:text-on-surface transition-colors">🍾 A Cerimônia de Reveal</a></li>
+              <li><Link to="/reveal" className="hover:text-on-surface transition-colors">🍾 A Cerimônia de Reveal</Link></li>
               <li><Link to="/resultados" className="hover:text-on-surface transition-colors">🏆 Galeria de Imortais</Link></li>
               <li><Link to="/admin" className="hover:text-on-surface transition-colors">🔑 Painel dos Administradores</Link></li>
             </ul>

@@ -71,8 +71,8 @@ export default function Header() {
           </button>
 
           <Link
-            to="/#cerimonia"
-            className={navClasses(currentPath === '/#cerimonia')}
+            to="/reveal"
+            className={navClasses(currentPath === '/reveal')}
           >
             A Cerimônia
           </Link>

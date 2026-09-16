@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Banco de dados gerado em runtime (DATABASE_URL é relativo ao CWD)
+app.db
+*.sqlite3
+
+# Ambientes e segredos
+.env
+!.env.example
+
+# Node / Vite
+node_modules/
+dist/
+
+# Sistema
+.DS_Store

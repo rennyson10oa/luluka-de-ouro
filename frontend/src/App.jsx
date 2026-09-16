@@ -5,6 +5,7 @@ import RegisterPage from './pages/RegisterPage'
 import VotePage from './pages/VotePage'
 import AdminPage from './pages/AdminPage'
 import ResultsPage from './pages/ResultsPage'
+import RevealPage from './pages/RevealPage'
 import ProfilePage from './pages/ProfilePage'
 import CandidacyPage from './pages/CandidacyPage'
 
@@ -19,6 +20,7 @@ function App() {
         <Route path="/perfil" element={<ProfilePage />} />
         <Route path="/candidaturas" element={<CandidacyPage />} />
         <Route path="/resultados" element={<ResultsPage />} />
+        <Route path="/reveal" element={<RevealPage />} />
         <Route path="/admin" element={<AdminPage />} />
       </Routes>
     </BrowserRouter>

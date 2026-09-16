@@ -45,6 +45,8 @@ export const RESULT_CATEGORIES = [
     emoji: '🎭',
     badge: 'Prêmio Imprevisibilidade',
     title: 'Melhor Participação Especial',
+    quote: 'Celebrando quem aparece menos que cometa em foto de grupo',
+    navLabel: 'Participação Especial',
     validVotes: '1.482 Votos Válidos',
     podium: {
       first: {
@@ -56,18 +58,22 @@ export const RESULT_CATEGORIES = [
         crimeLabel: 'O Crime Histórico:',
         crimeDetail: 'Eficiência de Presença: 0.04%',
         badge: 'Consagrado em Ata',
+        audio: { name: 'silencio_8_meses.mp3', duration: '0:03', desc: 'Mensagem de voz após sumiço' },
+        reactions: '124 REAÇÕES DE 😭',
       },
       second: {
         memeName: 'Primo do Interior',
         icon: 'account_circle',
         pct: '27.7%',
         votes: '410 votos computados',
+        detail: 'Apareceu na gala inteira, sumiu no abraço final',
       },
       third: {
         memeName: 'O CLT Exausto',
         icon: 'bedtime',
         pct: '21.2%',
         votes: '315 votos computados',
+        detail: 'Cansaço acumulado de 3 empregos e um plantão',
       },
       honorable: {
         memeName: 'Sumiço Tático',
@@ -81,6 +87,8 @@ export const RESULT_CATEGORIES = [
     emoji: '🤡',
     badge: 'Prêmio Mico Cósmico',
     title: 'Membro com Mais Pataquadas do Ano',
+    quote: 'Para quem transforma um almoço de domingo em tragédia nacional com audiência',
+    navLabel: 'Pataquadas',
     validVotes: '1.482 Votos Válidos',
     podium: {
       first: {
@@ -92,18 +100,22 @@ export const RESULT_CATEGORIES = [
         crimeLabel: 'O Crime Histórico:',
         crimeDetail: 'Dano de Imagem: Irrecuperável',
         badge: 'Maioria Absoluta',
+        audio: { name: 'grito_discord_loss.mp3', duration: '0:14', desc: 'Áudio vazado da chamada' },
+        reactions: '89 REAÇÕES DE ⚰️',
       },
       second: {
         memeName: 'Investidor de Shopee',
         icon: 'shopping_bag',
         pct: '31.0%',
         votes: '459 votos computados',
+        detail: 'Prejuízo estimado: R$ 49,90 + 3x de vergonha',
       },
       third: {
         memeName: 'Waze Humano',
         icon: 'near_me_disabled',
         pct: '15.0%',
         votes: '222 votos computados',
+        detail: 'Tempo perdido: 3h40min de pura raiva',
       },
       honorable: {
         memeName: 'O Quebra-Copos',
@@ -117,6 +129,8 @@ export const RESULT_CATEGORIES = [
     emoji: '👑',
     badge: 'Prêmio Elocuência Desmedida',
     title: 'Membro com Mais Mitadas',
+    quote: 'Para réticas que calaram o grupo e viraram patrimônio histórico',
+    navLabel: 'Mais Mitadas',
     validVotes: '1.482 Votos Válidos',
     podium: {
       first: {
@@ -128,18 +142,22 @@ export const RESULT_CATEGORIES = [
         crimeLabel: 'O Crime Histórico:',
         crimeDetail: 'Disputa Mais Apertada: 8.6% de Margem',
         badge: 'Homologado',
+        audio: { name: 'replica_relampago.mp3', duration: '0:07', desc: 'Resposta em velocidade da luz' },
+        reactions: '67 REAÇÕES DE 🤡',
       },
       second: {
         memeName: 'Sticker Milimétrico',
         icon: 'sticker',
         pct: '32.7%',
         votes: '485 votos computados',
+        detail: 'Precisão milimétrica: enviou no segundo exato',
       },
       third: {
         memeName: 'O Defensor Impossível',
         icon: 'shield',
         pct: '17.9%',
         votes: '265 votos computados',
+        detail: 'Defendeu causa perdida e ainda agradeceu a plateia',
       },
       honorable: {
         memeName: 'O Mestre dos Acordes',
@@ -153,6 +171,8 @@ export const RESULT_CATEGORIES = [
     emoji: '🌡️',
     badge: 'Prêmio Raciocínio Tépido',
     title: 'Membro com QI de Temperatura Ambiente',
+    quote: 'Honrando teorias que desafiaram a física, a geografia e o bom senso',
+    navLabel: 'QI Ambiente',
     validVotes: '1.482 Votos Válidos',
     podium: {
       first: {
@@ -164,18 +184,22 @@ export const RESULT_CATEGORIES = [
         crimeLabel: 'O Crime Histórico:',
         crimeDetail: 'Maior Lavada Eleitoral: 49.3%',
         badge: 'Quase 50% dos Votos',
+        audio: { name: 'teoria_no_call.mp3', duration: '0:21', desc: 'Explicação científica ao vivo' },
+        reactions: '203 REAÇÕES DE 💀',
       },
       second: {
         memeName: 'Teórico da Gravidade',
         icon: 'science',
         pct: '26.8%',
         votes: '398 votos computados',
+        detail: 'Jura que a Terra é plana até no paredão',
       },
       third: {
         memeName: 'Calculadora Quebrada',
         icon: 'calculate',
         pct: '14.2%',
         votes: '210 votos computados',
+        detail: 'Soma na mão: deu 47 numa conta de 2+2',
       },
       honorable: {
         memeName: 'Físico Quântico da Shopee',
