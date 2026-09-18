@@ -1,12 +1,16 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { MOCK_CATEGORIES } from '../data/mockAdmin'
 import { MOCK_MY_CANDIDACIES, MAX_CANDIDACIES } from '../data/mockProfile'
+import useAuth from './useAuth'
+import { scopedKey, userScope } from '../utils/userScope'
 
 /**
  * useCandidacies — store mock compartilhado de candidaturas do usuário.
  *
- * Persistência em localStorage (chave pg_candidacies), compartilhada entre
- * a Urna de Candidaturas (/candidaturas) e o Perfil (MyCandidacies).
+ * Persistência em localStorage COM ESCOPO DO ELEITOR (pg_candidacies:u<id>),
+ * compartilhada entre a Urna de Candidaturas (/candidaturas) e o Perfil
+ * (MyCandidacies + contador do ProfileHeader). Sem o escopo, o usuário B
+ * herdava o dossiê do usuário A (mesma classe do bug dos votos).
  *
  * Estrutura do item:
  *   { id, protocol, categoryId, categoryTitle, categoryEmoji, pitch, status, createdAt }
@@ -16,13 +20,12 @@ import { MOCK_MY_CANDIDACIES, MAX_CANDIDACIES } from '../data/mockProfile'
  *   1. Máx. MAX_CANDIDACIES (4) candidaturas ativas.
  *   2. 1 candidatura por categoria (openCategories some ao registrar).
  *   3. Pitch entre 1 e 280 caracteres.
- *   4. Edição bloqueada se pg_reveal_at passou (isClosed).
+ *   4. Edição bloqueada se pg_reveal_at passou (isClosed) — chave GLOBAL.
  *
  * ADR-0001 (gotcha): o store é dono dos próprios dados — NUNCA muta
  * MOCK_CATEGORIES (fonte única compartilhada com a cédula e o admin).
  */
 
-const STORAGE_KEY = 'pg_candidacies'
 const REVEAL_KEY = 'pg_reveal_at'
 
 /** Palavras de ligação ignoradas ao gerar as iniciais do protocolo. */
@@ -105,18 +108,37 @@ function buildProtocol(categoryTitle) {
 }
 
 export default function useCandidacies() {
-  // Estado inicial: lê do storage; se vazio, semeia a partir do mockProfile.
-  const [candidacies, setCandidacies] = useState(() => {
-    const saved = readJSON(STORAGE_KEY)
+  const { user } = useAuth()
+
+  // Chave com escopo do eleitor; 'anon' durante a hidratação do useAuth.
+  const storageKey = scopedKey('pg_candidacies', user)
+  const isAnon = userScope(user) === 'anon'
+
+  /** Lê do storage ou semeia (cada eleitor ganha o próprio dossiê inicial). */
+  function loadOrSeed() {
+    const saved = readJSON(storageKey)
     if (Array.isArray(saved)) return saved
     const seed = buildSeed()
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seed))
-    } catch {
-      // storage indisponível → segue só em memória
+    // Não persiste na chave 'anon' — é descartada quando o id chega.
+    if (!isAnon) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(seed))
+      } catch {
+        // storage indisponível → segue só em memória
+      }
     }
     return seed
-  })
+  }
+
+  // Estado inicial: lê do storage com escopo; se vazio, semeia.
+  const [candidacies, setCandidacies] = useState(loadOrSeed)
+
+  // Re-sincroniza quando a identidade muda (hidratação do useAuth preenche
+  // o id depois do 1º render; troca de usuário sem remount da página).
+  useEffect(() => {
+    setCandidacies(loadOrSeed())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey])
 
   const usedCount = candidacies.length
   const remaining = Math.max(0, MAX_CANDIDACIES - usedCount)
@@ -151,13 +173,13 @@ export default function useCandidacies() {
       const next = [...candidacies, item]
       setCandidacies(next)
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+        localStorage.setItem(storageKey, JSON.stringify(next))
       } catch {
         // storage indisponível → segue só em memória
       }
       return { success: true }
     },
-    [candidacies, remaining]
+    [candidacies, remaining, storageKey]
   )
 
   /** Retifica o pitch de uma candidatura existente (valida 1..280). */
@@ -170,13 +192,13 @@ export default function useCandidacies() {
       const next = candidacies.map((c) => (c.id === id ? { ...c, pitch: trimmed } : c))
       setCandidacies(next)
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+        localStorage.setItem(storageKey, JSON.stringify(next))
       } catch {
         // storage indisponível → segue só em memória
       }
       return { success: true }
     },
-    [candidacies]
+    [candidacies, storageKey]
   )
 
   /** Texto pronto para compartilhar no Zap. */

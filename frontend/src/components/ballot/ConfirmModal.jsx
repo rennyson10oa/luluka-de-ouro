@@ -1,9 +1,9 @@
 /**
- * ConfirmModal — modal de confirmación antes de sellar los votos.
+ * ConfirmModal — modal de confirmação antes de selar os votos.
  *
- * Overlay glassmorphism (bg-surface-container-lowest/85 + backdrop-blur-md) con
- * card central max-w-lg. Lista las elecciones actuales (o "Voto em branco" en
- * itálico outline) y ofrece "Cancelar" (ghost) / "Sim, Selar Meus Votos" (dorado).
+ * Overlay glassmorphism (bg-surface-container-lowest/85 + backdrop-blur-md) com
+ * card central max-w-lg. Lista as escolhas atuais (ou "Voto em branco" em
+ * itálico outline) e oferece "Cancelar" (ghost) / "Sim, Selar Meus Votos" (dourado).
  */
 export default function ConfirmModal({ open, categories, selection, onCancel, onConfirm }) {
   if (!open) return null
@@ -28,7 +28,7 @@ export default function ConfirmModal({ open, categories, selection, onCancel, on
             Ação irreversível — a urna é secreta, nenhum ajuste é permitido após o selo.
           </p>
 
-          {/* Resumen de elecciones actuales */}
+          {/* Resumo das escolhas atuais */}
           <div className="bg-surface-container p-4 rounded-xl mb-6">
             <ul className="space-y-2.5">
               {categories.map((cat) => {
@@ -50,7 +50,7 @@ export default function ConfirmModal({ open, categories, selection, onCancel, on
             </ul>
           </div>
 
-          {/* Acciones */}
+          {/* Ações */}
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               type="button"

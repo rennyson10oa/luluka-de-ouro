@@ -23,7 +23,7 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):
-    # Campos opcionales: solo se aplican los que vienen en el body.
+    # Campos opcionais: apenas os presentes no body são aplicados.
     username: Optional[str] = Field(None, min_length=3)
     vulgo: Optional[str] = Field(None, max_length=40)
 
@@ -33,7 +33,7 @@ class PasswordChange(BaseModel):
 
 class ProfileUpdateResponse(BaseModel):
     user: UserResponse
-    # Token presente SOLO si el username cambió (el JWT anterior queda stale).
+    # Token presente SOMENTE se o username mudou (o JWT anterior fica stale).
     access_token: Optional[str] = None
 
 class StateResponse(BaseModel):

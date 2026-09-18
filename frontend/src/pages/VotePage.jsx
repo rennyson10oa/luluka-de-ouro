@@ -8,13 +8,13 @@ import CategorySection from '../components/ballot/CategorySection'
 import ConfirmModal from '../components/ballot/ConfirmModal'
 
 // ---------------------------------------------------------------------------
-// Helpers de la cédula
+// Helpers da cédula
 // ---------------------------------------------------------------------------
 
 /**
- * Chequeo síncrono de sesión. useAuth hidrata de forma asíncrona (useEffect),
- * así que en el 1er render tras navegar desde /login el estado aún es null.
- * Sin este chequeo, un usuario logueado recibiría un redirect falso a /login.
+ * Cheque síncrono de sessão. O useAuth hidrata de forma assíncrona (useEffect),
+ * então no 1º render após navegar de /login o estado ainda é null.
+ * Sem este chequeo, um usuário logado receberia um redirect falso para /login.
  */
 function hasStoredSession() {
   try {
@@ -24,7 +24,7 @@ function hasStoredSession() {
   }
 }
 
-/** Target del cierre de urnas: pg_reveal_at (si es futuro) o mock +4d. */
+/** Alvo do fechamento das urnas: pg_reveal_at (se futuro) ou mock +4d. */
 function getRevealTarget() {
   try {
     const saved = localStorage.getItem('pg_reveal_at')
@@ -48,7 +48,7 @@ function formatCountdown(diff) {
   return `${pad(days)}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
 }
 
-/** Fecha legible pt-BR para el registro del sello. */
+/** Data legível em pt-BR para o registro do selo. */
 function formatRegisteredAt(iso) {
   if (!iso) return '--:--:--'
   const d = new Date(iso)
@@ -78,7 +78,7 @@ export default function VotePage() {
     if (!hasStoredSession()) {
       return <Navigate to="/login" replace state={{ from: '/votar' }} />
     }
-    // Sesión guardada pero useAuth aún hidratando (1er render tras navegación).
+    // Sessão salva, mas o useAuth ainda está hidratando (1º render após a navegação).
     return (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
         <Header />
@@ -109,7 +109,7 @@ export default function VotePage() {
 
   const pct = progress.total > 0 ? Math.round((progress.selected / progress.total) * 100) : 0
 
-  // ---- Estado: urnas cerradas ----
+  // ---- Estado: urnas fechadas ----
   if (isClosed) {
     return (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
@@ -146,7 +146,7 @@ export default function VotePage() {
     )
   }
 
-  // ---- Estado: votos sellados ----
+  // ---- Estado: votos selados ----
   if (hasSealed) {
     return (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
@@ -168,7 +168,7 @@ export default function VotePage() {
                 Sua cédula foi transmitida com sucesso para o banco de dados soberano. Seus comparsas jamais saberão em quem você votou — até o grande dia da revelação!
               </p>
 
-              {/* Metadatos del sello */}
+              {/* Metadados do selo */}
               <div className="bg-surface-container p-4 rounded-xl mb-6 space-y-2">
                 <div className="flex justify-between font-sans font-bold text-label-sm text-outline">
                   <span>Protocolo Hash:</span>
@@ -180,7 +180,7 @@ export default function VotePage() {
                 </div>
               </div>
 
-              {/* Lista compacta de elecciones */}
+              {/* Lista compacta das escolhas */}
               <div className="bg-surface-container-low rounded-xl p-4 mb-6">
                 <p className="font-sans font-bold text-label-sm text-secondary uppercase tracking-wider mb-2">
                   Suas escolhas seladas
@@ -220,19 +220,19 @@ export default function VotePage() {
     )
   }
 
-  // ---- Estado: cédula abierta (flujo principal) ----
+  // ---- Estado: cédula aberta (fluxo principal) ----
   return (
     <div className="min-h-screen flex flex-col bg-surface text-on-surface">
       <Header />
       <main className="flex-grow w-full max-w-7xl mx-auto px-6 lg:px-12 pt-28 pb-24 relative isolate">
-        {/* Capa de glows ambientales (clipped al main, detrás del contenido) */}
+        {/* Camada de glows ambientes (recortada pelo main, atrás do conteúdo) */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10" aria-hidden="true">
           <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse" />
           <div className="absolute top-1/3 right-10 w-80 h-80 bg-tertiary-container/10 rounded-full blur-3xl" />
           <div className="absolute bottom-40 left-10 w-96 h-96 bg-primary-container/10 rounded-full blur-3xl" />
         </div>
 
-          {/* ---- Cabeçalho de la cédula ---- */}
+          {/* ---- Cabeçalho da cédula ---- */}
           <header className="relative bg-surface-container/70 backdrop-blur-xl rounded-xl p-6 sm:p-8 lg:p-10 shadow-xl mb-10">
             <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-80 rounded-t-xl" />
 
@@ -308,9 +308,9 @@ export default function VotePage() {
             </div>
           </header>
 
-          {/* ---- Grid principal: categorías + sidebar ---- */}
+          {/* ---- Grid principal: categorias + sidebar ---- */}
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-            {/* Sidebar (mobile: arriba de las categorías; xl: columna derecha sticky) */}
+            {/* Sidebar (mobile: acima das categorias; xl: coluna direita fixa) */}
             <aside className="xl:col-span-4 order-first xl:order-last">
               <div className="xl:sticky xl:top-28 bg-surface-container-low/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg relative overflow-hidden">
                 <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
@@ -337,7 +337,7 @@ export default function VotePage() {
                   />
                 </div>
 
-                {/* Lista de selecciones actuales */}
+                {/* Lista das seleções atuais */}
                 <div className="flex flex-col gap-2 mb-5">
                   {categories.map((cat) => {
                     const nomineeId = selection[cat.id]
@@ -353,7 +353,7 @@ export default function VotePage() {
                   })}
                 </div>
 
-                {/* Acciones */}
+                {/* Ações */}
                 <div className="flex flex-col gap-3">
                   <button
                     type="button"
@@ -376,7 +376,7 @@ export default function VotePage() {
               </div>
             </aside>
 
-            {/* Columna principal: categorías */}
+            {/* Coluna principal: categorias */}
             <section className="xl:col-span-8 flex flex-col gap-6">
               {categories.map((cat, i) => (
                 <CategorySection
@@ -393,7 +393,7 @@ export default function VotePage() {
       </main>
       <Footer />
 
-      {/* Modal de confirmación del sello */}
+      {/* Modal de confirmação do selo */}
       <ConfirmModal
         open={modalOpen}
         categories={categories}

@@ -1,6 +1,6 @@
 # ADR-0001 — AuthProvider reativo e Header persistente no layout
 
-- **Status:** Proposto (não implementado — priorização futura)
+- **Status:** Aceito — **AuthProvider implementado** (2026-09-16, durante a verificação da Task 7: o estado fragmentado do `useAuth` fazia o perfil só atualizar após reload). **Header persistente no layout: pendente** (refatoração de layout, priorização futura).
 - **Data:** 2026-09-14
 - **Contexto de origem:** bug do tamanho alternado do `Trophy3DIcon` ao navegar entre rotas
 

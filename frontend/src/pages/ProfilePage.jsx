@@ -10,9 +10,9 @@ import MyCandidacies from '../components/profile/MyCandidacies'
 import ActivityTimeline from '../components/profile/ActivityTimeline'
 
 /**
- * Chequeo síncrono de sesión. useAuth hidrata de forma asíncrona (useEffect),
- * así que en el 1er render tras navegar desde /login el estado aún es null.
- * Sin este chequeo, un usuario logueado recibiría un redirect falso a /login.
+ * Cheque síncrono de sessão. O useAuth hidrata de forma assíncrona (useEffect),
+ * então no 1º render após navegar de /login o estado ainda é null.
+ * Sem este chequeo, um usuário logado receberia um redirect falso para /login.
  */
 function hasStoredSession() {
   try {
@@ -23,10 +23,10 @@ function hasStoredSession() {
 }
 
 /**
- * ProfilePage — Perfil del Usuario (/perfil).
- * Guard idéntico al VotePage: sin sesión → /login; sesión guardada pero
- * useAuth aún hidratando → pantalla de verificación.
- * Layout: grid 12 col (5 sticky izquierda / 7 derecha) según perfil.html.
+ * ProfilePage — Perfil do Usuário (/perfil).
+ * Guard idêntico ao VotePage: sem sessão → /login; sessão salva mas
+ * useAuth ainda hidratando → tela de verificação.
+ * Layout: grid 12 colunas (5 fixas à esquerda / 7 à direita) conforme perfil.html.
  */
 export default function ProfilePage() {
   const { isAuthenticated, user, logout } = useAuth()
@@ -44,7 +44,7 @@ export default function ProfilePage() {
     if (!hasStoredSession()) {
       return <Navigate to="/login" replace state={{ from: '/perfil' }} />
     }
-    // Sesión guardada pero useAuth aún hidratando (1er render tras navegación).
+    // Sessão salva, mas o useAuth ainda está hidratando (1º render após a navegação).
     return (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
         <Header />
@@ -64,7 +64,7 @@ export default function ProfilePage() {
       <Header />
       <main className="flex-grow w-full max-w-7xl mx-auto px-6 lg:px-12 pt-28 pb-24">
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-          {/* ---- Columna izquierda (sticky) ---- */}
+          {/* ---- Coluna esquerda (fixa) ---- */}
           <aside className="xl:col-span-5 flex flex-col gap-6 xl:sticky xl:top-28">
             <ProfileHeader user={user} />
             <HonorsCard />
@@ -83,7 +83,7 @@ export default function ProfilePage() {
             </button>
           </aside>
 
-          {/* ---- Columna derecha ---- */}
+          {/* ---- Coluna direita ---- */}
           <section className="xl:col-span-7 flex flex-col gap-6">
             <AccountSettings user={user} onToast={showToast} />
             <MyCandidacies onToast={showToast} />

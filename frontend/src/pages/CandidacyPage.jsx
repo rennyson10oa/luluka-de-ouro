@@ -8,9 +8,9 @@ import CandidacyCard from '../components/candidacy/CandidacyCard'
 import CandidacyModal from '../components/candidacy/CandidacyModal'
 
 /**
- * Chequeo síncrono de sesión. useAuth hidrata de forma asíncrona (useEffect),
- * así que en el 1er render tras navegar desde /login el estado aún es null.
- * Sin este chequeo, un usuario logueado recibiría un redirect falso a /login.
+ * Cheque síncrono de sessão. O useAuth hidrata de forma assíncrona (useEffect),
+ * então no 1º render após navegar de /login o estado ainda é null.
+ * Sem este chequeo, um usuário logado receberia um redirect falso para /login.
  */
 function hasStoredSession() {
   try {
@@ -22,7 +22,7 @@ function hasStoredSession() {
 
 /**
  * CandidacyPage — Urna de Candidaturas (/candidaturas).
- * Guard idéntico al VotePage. Store compartido (pg_candidacies) con el perfil.
+ * Guard idêntico ao VotePage. Store compartilhado (pg_candidacies) com o perfil.
  * Tudo mock: candidaturas persistem em localStorage e as categorias vêm de
  * MOCK_CATEGORIES (fonte única, nunca mutada — ADR-0001).
  */
@@ -55,7 +55,7 @@ export default function CandidacyPage() {
     if (!hasStoredSession()) {
       return <Navigate to="/login" replace state={{ from: '/candidaturas' }} />
     }
-    // Sesión guardada pero useAuth aún hidratando (1er render tras navegación).
+    // Sessão salva, mas o useAuth ainda está hidratando (1º render após a navegação).
     return (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
         <Header />

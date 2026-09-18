@@ -1,22 +1,29 @@
-import { useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 
 /**
- * useAuth — autenticação real contra o backend FastAPI (JWT Bearer).
+ * useAuth / AuthProvider — autenticação real contra o backend FastAPI (JWT Bearer).
+ *
+ * ARQUITETURA (ADR-0001): o estado de autenticação vive em UM AuthProvider
+ * no topo da árvore (App.jsx). Todas as telas consomem o mesmo contexto via
+ * useAuth() — um updateProfile reflete instantaneamente no Header, no
+ * ProfileHeader e em qualquer consumidor. Antes do provider, cada instância
+ * do hook tinha estado próprio e o perfil só atualizava após reload.
  *
  * Estado persistido em localStorage:
  *   - pg_token → JWT emitido pelo cartório (Authorization: Bearer)
  *   - pg_user  → { id, username, vulgo } devolvido por GET /api/me
  *
- * Interface pública preservada (compatível com todas as páginas existentes):
- *   user, isAuthenticated, login, register, logout
- * + novidades: updateProfile, changePassword
+ * Interface pública (compatível com todas as páginas existentes):
+ *   user, isAuthenticated, login, register, logout, updateProfile, changePassword
  *
- * Nota: pg_user continua sendo gravado porque o guard do VotePage o lê de
- * forma síncrona (useAuth hidrata de forma assíncrona via useEffect).
+ * Nota: pg_user continua sendo gravado porque os guards das páginas o leem
+ * de forma síncrona (a hidratação do contexto é assíncrona via useEffect).
  */
 
 const TOKEN_KEY = 'pg_token'
 const USER_KEY = 'pg_user'
+
+const AuthContext = createContext(null)
 
 /**
  * Helper de fetch contra o backend: adiciona Authorization Bearer quando há
@@ -46,13 +53,17 @@ async function api(path, { method = 'GET', body, token } = {}) {
   }
 }
 
-export default function useAuth() {
+/**
+ * AuthProvider — dono único do estado de autenticação. Montar uma vez só,
+ * acima do Router (ver App.jsx).
+ */
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
 
-  // Hidratación de sesión al montar:
-  // - Con pg_token → valida contra GET /api/me (200 → refresca pg_user).
-  // - 401/erro de red → limpia pg_token y pg_user (sesión muerta).
-  // - Sin pg_token → limpia pg_user (invalida sesiones mock legadas).
+  // Hidratação de sessão ao montar (uma única vez, aqui no provider):
+  // - Com pg_token → valida contra GET /api/me (200 → refresca pg_user).
+  // - 401/erro de rede → limpa pg_token e pg_user (sessão morta).
+  // - Sem pg_token → limpa pg_user (invalida sessões mock legadas).
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY)
     if (!token) {
@@ -96,7 +107,6 @@ export default function useAuth() {
       localStorage.setItem(USER_KEY, JSON.stringify(me.data))
       setUser(me.data)
     } else {
-      // Login ok pero /api/me falló: sesión parcial con el username enviado.
       localStorage.setItem(USER_KEY, JSON.stringify({ username }))
       setUser({ username })
     }
@@ -181,13 +191,31 @@ export default function useAuth() {
     return { success: true }
   }, [])
 
-  return {
-    user,
-    isAuthenticated: Boolean(user),
-    login,
-    register,
-    logout,
-    updateProfile,
-    changePassword,
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: Boolean(user),
+        login,
+        register,
+        logout,
+        updateProfile,
+        changePassword,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+/**
+ * useAuth — consumidor do contexto de autenticação. Compartilha o MESMO
+ * estado entre todos os componentes (Header, páginas, guards, hooks).
+ */
+export default function useAuth() {
+  const ctx = useContext(AuthContext)
+  if (!ctx) {
+    throw new Error('useAuth deve ser usado dentro de <AuthProvider> (ver App.jsx)')
   }
+  return ctx
 }

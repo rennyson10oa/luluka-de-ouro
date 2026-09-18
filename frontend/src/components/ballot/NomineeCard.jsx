@@ -1,12 +1,12 @@
 /**
- * NomineeCard — card de indicado de la cédula.
+ * NomineeCard — card de indicado da cédula.
  *
  * Estados:
- *  - default: borde outline-variant/30, hover con borde primary/40 y leve elevación.
- *  - selected: borde primary (1.5px) + sheen dorado + check en círculo primary.
- *  - disabled (auto-voto): opacidad reducida, gavel/lock, cursor-not-allowed, sin onClick.
+ *  - default: borda outline-variant/30, hover com borda primary/40 e leve elevação.
+ *  - selected: borda primary (1.5px) + brilho dourado + check em círculo primary.
+ *  - disabled (auto-voto): opacidade reduzida, gavel/lock, cursor-not-allowed, sem onClick.
  *
- * Base visual: cards de la cédula desktop + tratamiento de auto-voto de la urna mobile.
+ * Base visual: cards da cédula desktop + tratamento de auto-voto da urna mobile.
  */
 export default function NomineeCard({ nominee, selected = false, disabled = false, onSelect = () => {} }) {
   const initial = (nominee.name || '?').trim().charAt(0).toUpperCase()
@@ -66,7 +66,7 @@ export default function NomineeCard({ nominee, selected = false, disabled = fals
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 pointer-events-none rounded-xl" />
       )}
 
-      {/* Check en círculo primary (esquina superior) */}
+      {/* Check em círculo primary (canto superior) */}
       {selected && (
         <div className="absolute -top-2.5 right-4 w-7 h-7 rounded-full bg-primary flex items-center justify-center shadow-[0_0_12px_rgba(212,175,55,0.6)]">
           <span className="material-symbols-outlined text-on-primary text-[16px] font-bold">check</span>

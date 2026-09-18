@@ -1,29 +1,32 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { MOCK_CATEGORIES } from '../data/mockAdmin'
 import useAuth from './useAuth'
+import { scopedKey } from '../utils/userScope'
 
 /**
- * useBallot — lógica completa de la cédula de votación (mock, sin backend).
+ * useBallot — lógica completa da cédula de votação (mock, sem backend).
  *
- * Estado local de selección + persistencia en localStorage:
- *   - pg_votes      → { [categoryId]: nomineeId } (votos sellados)
- *   - pg_votes_meta → { hash, at } (metadatos del sello)
- *   - pg_reveal_at  → fecha ISO de cierre de urnas (agendada por el admin)
+ * Estado local de seleção + persistência em localStorage COM ESCOPO DO
+ * ELEITOR (pg_votes:u<id>) — votos são do eleitor, não da gala. Sem o
+ * escopo, o usuário B herdava a cédula selada do usuário A (bug corrigido
+ * na verificação da Task 6).
  *
- * Reglas de negocio cubiertas:
- *   1. 1 voto por categoría (selection map garantiza unicidad).
- *   2. Auto-voto bloqueado vía isSelfVote → card disabled.
- *   3. Voto en blanco permitido (categoría sin selección = null).
- *   4. Cambio de voto permitido ANTES de sellar; tras sellar, bloqueado (hasSealed).
- *   5. Persistencia en pg_votes + pg_votes_meta.
- *   6. Urnas cerradas si pg_reveal_at < now.
+ *   - pg_votes:u<id>      → { [categoryId]: nomineeId } (votos selados)
+ *   - pg_votes_meta:u<id> → { hash, at } (metadados do selo)
+ *   - pg_reveal_at        → data ISO de fechamento (GLOBAL — config da gala)
  *
- * ADR-0001 (gotcha): la selección es estado local del hook — nunca se muta
- * MOCK_CATEGORIES (single source of truth compartida con el panel admin).
+ * Regras de negócio cobertas:
+ *   1. 1 voto por categoria (selection map garante unicidade).
+ *   2. Auto-voto bloqueado via isSelfVote → card disabled.
+ *   3. Voto em branco permitido (categoria sem seleção = null).
+ *   4. Mudança de voto permitida ANTES de selar; após selar, bloqueada (hasSealed).
+ *   5. Persistência por usuário em pg_votes:u<id> + pg_votes_meta:u<id>.
+ *   6. Urnas fechadas se pg_reveal_at < now.
+ *
+ * ADR-0001 (gotcha): a seleção é estado local do hook — nunca se muta
+ * MOCK_CATEGORIES (single source of truth compartilhada com o painel admin).
  */
 
-const VOTES_KEY = 'pg_votes'
-const META_KEY = 'pg_votes_meta'
 const REVEAL_KEY = 'pg_reveal_at'
 
 function readJSON(key) {
@@ -62,19 +65,32 @@ export default function useBallot() {
   const { user } = useAuth()
   const username = user?.username || ''
 
-  // Selección local (voto en blanco = categoría sin selección / null).
+  // Chaves com escopo do eleitor. Durante a hidratação do useAuth (sem id
+  // ainda) o escopo é 'anon' — chave vazia por definição, sem flash de
+  // estado alheio. O useEffect abaixo re-sincroniza quando o id chega.
+  const votesKey = scopedKey('pg_votes', user)
+  const metaKey = scopedKey('pg_votes_meta', user)
+
+  // Seleção local (voto em branco = categoria sem seleção / null).
   const [selection, setSelection] = useState({})
 
-  // Votos ya sellados (leídos de localStorage al montar).
-  const [sealedVotes, setSealedVotes] = useState(() => readJSON(VOTES_KEY) || {})
-  const [sealedMeta, setSealedMeta] = useState(() => readJSON(META_KEY) || { hash: null, at: null })
+  // Votos já selados (lidos do storage com escopo ao montar).
+  const [sealedVotes, setSealedVotes] = useState(() => readJSON(votesKey) || {})
+  const [sealedMeta, setSealedMeta] = useState(() => readJSON(metaKey) || { hash: null, at: null })
 
-  // true si pg_votes existe y no está vacío.
+  // Re-sincroniza o selo quando a identidade muda (hidratação do useAuth
+  // preenche o id depois do 1º render; troca de usuário sem remount).
+  useEffect(() => {
+    setSealedVotes(readJSON(votesKey) || {})
+    setSealedMeta(readJSON(metaKey) || { hash: null, at: null })
+  }, [votesKey, metaKey])
+
+  // true se pg_votes:u<id> existe e não está vazio.
   const hasSealed = Object.keys(sealedVotes).length > 0
 
   /**
-   * Selecciona/deselecciona un indicado en una categoría.
-   * Clic en el ya seleccionado → deselecciona (permite cambiar antes de sellar).
+   * Seleciona/desseleciona um indicado em uma categoria.
+   * Clicar no já selecionado → desseleciona (permite mudar antes de selar).
    */
   const toggleSelection = useCallback((categoryId, nomineeId) => {
     setSelection((prev) => {
@@ -88,7 +104,7 @@ export default function useBallot() {
     })
   }, [])
 
-  /** true si el indicado es el propio usuario (auto-voto bloqueado). */
+  /** true se o indicado é o próprio usuário (auto-voto bloqueado). */
   const isSelfVote = useCallback((nominee) => {
     return normalize(username) === normalize(nominee.handle)
   }, [username])
@@ -98,18 +114,18 @@ export default function useBallot() {
     total: MOCK_CATEGORIES.length,
   }
 
-  /** Sella los votos: genera hash fake, persiste pg_votes + pg_votes_meta. */
+  /** Sela os votos: gera hash fake, persiste pg_votes:u<id> + pg_votes_meta:u<id>. */
   const sealVotes = useCallback(() => {
     const hash = generateHash()
     const at = new Date().toISOString()
-    localStorage.setItem(VOTES_KEY, JSON.stringify(selection))
-    localStorage.setItem(META_KEY, JSON.stringify({ hash, at }))
+    localStorage.setItem(votesKey, JSON.stringify(selection))
+    localStorage.setItem(metaKey, JSON.stringify({ hash, at }))
     setSealedVotes(selection)
     setSealedMeta({ hash, at })
     return { success: true, hash }
-  }, [selection])
+  }, [selection, votesKey, metaKey])
 
-  /** Limpia solo la selección local (no toca los votos sellados). */
+  /** Limpa apenas a seleção local (não toca os votos selados). */
   const resetSelection = useCallback(() => {
     setSelection({})
   }, [])

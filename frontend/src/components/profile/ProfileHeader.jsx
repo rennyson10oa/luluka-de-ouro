@@ -1,22 +1,22 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MOCK_HONORS } from '../../data/mockProfile'
 import useCandidacies from '../../hooks/useCandidacies'
+import { scopedKey } from '../../utils/userScope'
 
-const AVATAR_KEY = 'pg_avatar'
-
-/** Lee el avatar en dataURL guardado en localStorage (o null). */
-function readAvatar() {
+/** Lê o avatar em dataURL guardado no storage com escopo (ou null). */
+function readAvatar(key) {
   try {
-    return localStorage.getItem(AVATAR_KEY) || null
+    return localStorage.getItem(key) || null
   } catch {
     return null
   }
 }
 
-/** Cuenta los votos REALES de la cédula mock (pg_votes) — solo entradas con voto. */
-function countVotes() {
+/** Conta os votos REAIS da cédula mock (pg_votes:u<id>) — só entradas com voto.
+ *  A chave precisa ser idêntica à que o useBallot escreve. */
+function countVotes(key) {
   try {
-    const raw = localStorage.getItem('pg_votes')
+    const raw = localStorage.getItem(key)
     if (!raw) return 0
     const votes = JSON.parse(raw)
     return Object.values(votes).filter(Boolean).length
@@ -27,15 +27,22 @@ function countVotes() {
 
 /**
  * ProfileHeader — tarjeta glassmorphism de identidad del eleitor:
- * avatar circular (dataURL de pg_avatar o ícono dorado), badge de estado,
- * nome de exibição (vulgo || username), @handle, quote estática y 3 mini-stats.
- * El upload de avatar es MOCK funcional (persiste en pg_avatar, <200KB).
+ * avatar circular (dataURL de pg_avatar:u<id> ou ícone dourado), badge de estado,
+ * nome de exibição (vulgo || username), @handle, quote estática e 3 mini-stats.
+ * O upload de avatar é MOCK funcional (persiste com escopo do eleitor, <200KB).
  */
 export default function ProfileHeader({ user }) {
-  const [avatar, setAvatar] = useState(readAvatar)
+  const avatarKey = scopedKey('pg_avatar', user)
+  const votesKey = scopedKey('pg_votes', user)
+  const [avatar, setAvatar] = useState(() => readAvatar(avatarKey))
   const [avatarError, setAvatarError] = useState('')
   const fileInputRef = useRef(null)
   const { usedCount, maxCandidacies } = useCandidacies()
+
+  // Re-sincroniza o avatar se a identidade mudar sem remount (hidratação).
+  useEffect(() => {
+    setAvatar(readAvatar(avatarKey))
+  }, [avatarKey])
 
   function handleAvatarChange(e) {
     const file = e.target.files?.[0]
@@ -46,17 +53,17 @@ export default function ProfileHeader({ user }) {
     }
     const reader = new FileReader()
     reader.onload = () => {
-      localStorage.setItem(AVATAR_KEY, reader.result)
+      localStorage.setItem(avatarKey, reader.result)
       setAvatar(reader.result)
       setAvatarError('')
     }
     reader.readAsDataURL(file)
-    // Permite re-seleccionar el mismo archivo en el próximo clic.
+    // Permite re-selecionar o mesmo arquivo no próximo clique.
     e.target.value = ''
   }
 
   function removeAvatar() {
-    localStorage.removeItem(AVATAR_KEY)
+    localStorage.removeItem(avatarKey)
     setAvatar(null)
     setAvatarError('')
   }
@@ -144,7 +151,7 @@ export default function ProfileHeader({ user }) {
             <span className="text-label-sm uppercase tracking-wider">Votos 2025</span>
             <span className="material-symbols-outlined text-[16px] text-primary">how_to_vote</span>
           </div>
-          <div className="font-serif font-bold text-headline-sm text-on-surface">{countVotes()}</div>
+          <div className="font-serif font-bold text-headline-sm text-on-surface">{countVotes(votesKey)}</div>
           <div className="text-label-sm text-primary flex items-center gap-1 mt-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block animate-ping" /> de 4 categorias
           </div>

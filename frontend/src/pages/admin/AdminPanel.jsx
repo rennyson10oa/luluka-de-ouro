@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { HeaderAdmin } from '../../components/Header'
 import useAdminAuth from '../../hooks/useAdminAuth'
+import useAuth from '../../hooks/useAuth'
 import { MOCK_STATS, MOCK_CATEGORIES, MOCK_AUDIT_LOG, TOTAL_VOTES } from '../../data/mockAdmin'
 
 const REVEAL_KEY = 'pg_reveal_at'
@@ -111,6 +113,8 @@ function CategoryCard({ category, onAction }) {
 
 export default function AdminPanel() {
   const { admin, logoutAdmin } = useAdminAuth()
+  const { logout } = useAuth()
+  const navigate = useNavigate()
   const [revealAt, setRevealAt] = useState(() => localStorage.getItem(REVEAL_KEY) || '')
   const [toast, setToast] = useState(null)
   const [filter, setFilter] = useState('')
@@ -138,7 +142,12 @@ export default function AdminPanel() {
     Object.keys(sessionStorage)
       .filter((k) => k.startsWith('pg_'))
       .forEach((k) => sessionStorage.removeItem(k))
-    showToast('Operação notarial realizada: todos os registros foram zerados.')
+    // Sincroniza os providers ANTES de sair: sem isso, Header e painel
+    // continuariam exibindo sessões ativas até o próximo reload.
+    logoutAdmin()
+    logout()
+    // Home em estado limpo — o redirect é o feedback principal da ação.
+    navigate('/', { replace: true })
   }
 
   const filteredLog = MOCK_AUDIT_LOG.filter(

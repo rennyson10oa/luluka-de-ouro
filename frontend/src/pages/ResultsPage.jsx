@@ -213,9 +213,9 @@ function FinalCta({ onReplay }) {
 }
 
 /**
- * ResultsPage — Galeria de Resultados Oficiales (/resultados).
- * Pública (sin guard de login). Trancada apenas si pg_reveal_at está en el
- * futuro (ceremonia pendiente); ausente o pasada → galería abierta.
+ * ResultsPage — Galeria de Resultados Oficiais (/resultados).
+ * Pública (sem guard de login). Trancada apenas se pg_reveal_at está no
+ * futuro (cerimônia pendente); ausente ou passada → galeria aberta.
  */
 export default function ResultsPage() {
   const [isLocked] = useState(() => computeIsLocked())
@@ -257,13 +257,13 @@ export default function ResultsPage() {
       ? RESULT_CATEGORIES
       : RESULT_CATEGORIES.filter((cat) => cat.id === activeFilter)
 
-  // El número de categoría sale de la posición original en el dataset
+  // O número da categoria vem da posição original no dataset
   // (así, filtrar "Mitadas" sigue mostrando "Categoria 03").
   function categoryNumber(cat) {
     return RESULT_CATEGORIES.findIndex((c) => c.id === cat.id) + 1
   }
 
-  // ---- Estado TRANCADO: ceremonia pendiente (pg_reveal_at en el futuro) ----
+  // ---- Estado TRANCADO: cerimônia pendente (pg_reveal_at no futuro) ----
   if (isLocked) {
     return (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
@@ -298,7 +298,7 @@ export default function ResultsPage() {
     )
   }
 
-  // ---- Estado ABIERTO: galería completa ----
+  // ---- Estado ABERTO: galeria completa ----
   return (
     <div className="min-h-screen flex flex-col bg-surface text-on-surface">
       <Header />
@@ -324,10 +324,10 @@ export default function ResultsPage() {
             ))}
           </section>
 
-          {/* Filtro de categorías */}
+          {/* Filtro de categorias */}
           <CategoryFilter active={activeFilter} onChange={setActiveFilter} />
 
-          {/* Pódios por categoría */}
+          {/* Pódios por categoria */}
           <div className="flex flex-col gap-space-xl">
             {filteredCategories.length === 0 ? (
               <p className="text-center font-sans text-body-sm text-on-surface-variant">

@@ -28,17 +28,26 @@ cd frontend && npm run dev
 
 Usuários do seed (senha `123`): `joaorei`, `maria`, `carlos`, `ana`, `pedro`, `julia`.
 
-**Chaves de localStorage gerenciadas pelo app** (úteis para inspecionar/resetar):
+> **Atenção:** o DB de desenvolvimento pode conter contas extras criadas
+> durante a verificação (ex.: `test` — senha `123`, `test2` — senha `test`).
+> Elas NÃO fazem parte do seed. Para listar as contas existentes:
+> `sqlite3 app.db "SELECT id, username FROM users"`. Não confunda contas com
+> nomes parecidos — `test` ≠ `test2`.
+
+**Chaves de localStorage gerenciadas pelo app** (úteis para inspecionar/resetar).
+Chaves de dados do eleitor são **escopadas por `user.id`** (`pg_votes:u3`) —
+sem isso, os dados de um usuário vazavam para o próximo. `pg_reveal_at` é
+global de propósito (configuração da gala):
 
 | Chave | Dono | Conteúdo |
 |-------|------|----------|
 | `pg_token` | useAuth (REAL) | JWT da sessão do usuário |
 | `pg_user` | useAuth | `{ id, username, vulgo }` (cache + guard do VotePage) |
-| `pg_votes` | useBallot (MOCK) | `{ [categoryId]: nomineeId }` — votos selados |
-| `pg_votes_meta` | useBallot | `{ hash, at }` do selo |
-| `pg_candidacies` | useCandidacies (MOCK) | candidaturas do usuário (compartilhado perfil ↔ urna) |
-| `pg_avatar` | ProfileHeader (MOCK) | dataURL da foto |
-| `pg_reveal_at` | AdminPanel (MOCK) | ISO do reveal agendado |
+| `pg_votes:u<id>` | useBallot (MOCK) | `{ [categoryId]: nomineeId }` — votos selados do eleitor |
+| `pg_votes_meta:u<id>` | useBallot | `{ hash, at }` do selo |
+| `pg_candidacies:u<id>` | useCandidacies (MOCK) | candidaturas do eleitor (compartilhado perfil ↔ urna) |
+| `pg_avatar:u<id>` | ProfileHeader (MOCK) | dataURL da foto do eleitor |
+| `pg_reveal_at` | AdminPanel (MOCK, global) | ISO do reveal agendado |
 | `pg_admin` | useAdminAuth (MOCK) | sessão admin (sessionStorage) |
 
 **Reset total:** use a Zona de Perigo do painel admin (`/admin`) ou limpe
@@ -66,7 +75,7 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** criação de conta com validações locais + unicidade no banco.
 
-- [ ] **2.1** Sem backend rodando: submit exibe "Cartório indisponível..." (mensagem de rede).
+- [x] **2.1** Sem backend rodando: submit exibe "Cartório indisponível..." (mensagem de rede).
 - [x] **2.2** Username com menos de 3 caracteres: feedback "Mínimo de 3 caracteres"; com 3+: "disponível para nomeação".
 - [x] **2.3** Senhas diferentes: "As senhas ainda não coincidem" (vermelho); iguais: "Senhas conferem! Voto garantido" (verde).
 - [x] **2.4** Botão "Criar conta" desabilitado até: username ≥3, senhas conferem, termos aceito.
@@ -83,14 +92,14 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** autenticação, persistência de sessão e tratamento de erros.
 
-- [ ] **3.1** Credenciais válidas (seed: `joaorei` / `123`) → navega para `/votar`; `pg_token` salvo.
-- [ ] **3.2** Senha errada → banner "Usuário ou senha incorretos" + **animação de shake** no card.
-- [ ] **3.3** Campos vazios → submit bloqueado (validação nativa).
-- [ ] **3.4** Recarregar a página com sessão ativa → continua logado (hidratação via `GET /api/me` com `pg_token`).
-- [ ] **3.5** Corromper `pg_token` no DevTools e recarregar → sessão limpa silenciosamente (volta a deslogado, sem crash).
-- [ ] **3.6** "Esqueceu a senha? Chame o admin" → alert humorístico.
-- [ ] **3.7** Sessão mock legada: com `pg_user` presente mas **sem** `pg_token`, recarregar → deslogado (invalidação correta).
-- [ ] **3.8** **Retorno ao destino original (redirect-after-login):** deslogado, clicar no avatar do header → `/login`; logar → deve cair em `/perfil` (não em `/votar`). Repetir saindo de `/votar` (via botão Votação) e de `/candidaturas` direto na URL → login devolve a cada origem. Sem origem (acesso direto a `/login`) → fluxo padrão `/votar`.
+- [x] **3.1** Credenciais válidas (seed: `joaorei` / `123`) → navega para `/votar`; `pg_token` salvo.
+- [x] **3.2** Senha errada → banner "Usuário ou senha incorretos" + **animação de shake** no card.
+- [x] **3.3** Campos vazios → submit bloqueado (validação nativa).
+- [x] **3.4** Recarregar a página com sessão ativa → continua logado (hidratação via `GET /api/me` com `pg_token`).
+- [x] **3.5** Corromper `pg_token` no DevTools e recarregar → sessão limpa silenciosamente (volta a deslogado, sem crash).
+- [x] **3.6** "Esqueceu a senha? Chame o admin" → alert humorístico.
+- [x] **3.7** Sessão mock legada: com `pg_user` presente mas **sem** `pg_token`, recarregar → deslogado (invalidação correta).
+- [x] **3.8** **Retorno ao destino original (redirect-after-login):** deslogado, clicar no avatar do header → `/login`; logar → deve cair em `/perfil` (não em `/votar`). Repetir saindo de `/votar` (via botão Votação) e de `/candidaturas` direto na URL → login devolve a cada origem. Sem origem (acesso direto a `/login`) → fluxo padrão `/votar`.
 
 **Status:** `____`
 
@@ -100,12 +109,12 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** links, estados ativos e avatar.
 
-- [ ] **4.1** Header: Início, Candidaturas, Votação, A Cerimônia, Galeria de Resultados e Admin navegam para as rotas corretas.
-- [ ] **4.2** O item da rota atual fica destacado (fundo dourado suave) em cada página.
-- [ ] **4.3** "Votação" é auth-aware (deslogado → `/login`; logado → `/votar`).
-- [ ] **4.4** Avatar do header: deslogado → `/login` com title "Entrar na Gala"; logado → `/perfil` com title "Perfil de @{username}".
-- [ ] **4.5** Footer: os 5 links de "Acesso aos Salões" navegam corretamente (Urna de Candidaturas, Cédula, Cerimônia, Galeria, Painel Admin).
-- [ ] **4.6** "Voltar ao topo" do footer rola suavemente.
+- [x] **4.1** Header: Início, Candidaturas, Votação, A Cerimônia, Galeria de Resultados e Admin navegam para as rotas corretas.
+- [x] **4.2** O item da rota atual fica destacado (fundo dourado suave) em cada página.
+- [x] **4.3** "Votação" é auth-aware (deslogado → `/login`; logado → `/votar`).
+- [x] **4.4** Avatar do header: deslogado → `/login` com title "Entrar na Gala"; logado → `/perfil` com title "Perfil de @{username}".
+- [x] **4.5** Footer: os 5 links de "Acesso aos Salões" navegam corretamente (Urna de Candidaturas, Cédula, Cerimônia, Galeria, Painel Admin).
+- [x] **4.6** "Voltar ao topo" do footer rola suavemente.
 
 **Status:** `____`
 
@@ -115,16 +124,16 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** gestão de candidaturas com store compartilhado com o perfil.
 
-- [ ] **5.1** Deslogado → redirect para `/login`.
-- [ ] **5.2** Primeiro acesso semeia 2 candidaturas (#MIT em disputa, #PAT homologada) e o badge mostra "2/4 Ativas".
-- [ ] **5.3** "Vagas Abertas" lista exatamente as 2 categorias sem candidatura.
-- [ ] **5.4** Candidatar-se: modal abre com a categoria correta; contador de caracteres cresce ao digitar; acima de 280 fica vermelho e o submit desabilita.
-- [ ] **5.5** Candidatura registrada → card "STATUS: EM DISPUTA" surge com protocolo `#XXX-2025-NN`; badge vira "3/4 Ativas"; a vaga da categoria some.
-- [ ] **5.6** **Perfil sincronizado:** abrir `/perfil` → "Minhas Candidaturas" mostra a nova candidatura e o contador do card do eleitor reflete 3.
-- [ ] **5.7** Editar pitch (edit_note) → modal em modo edição pré-preenchido; salvar altera o texto no card e no perfil.
-- [ ] **5.8** **Compartilhar:** botão share copia o texto formatado (clipboard) → toast de confirmação.
-- [ ] **5.9** Com `pg_reveal_at` no passado: cards viram "SELADO PARA A CERIMÔNIA", edição desabilitada, seção de vagas some, share continua.
-- [ ] **5.10** Com 4/4: banner "dossiê completo" e nenhuma vaga aberta.
+- [x] **5.1** Deslogado → redirect para `/login`.
+- [x] **5.2** Primeiro acesso semeia 2 candidaturas (#MIT em disputa, #PAT homologada) e o badge mostra "2/4 Ativas".
+- [x] **5.3** "Vagas Abertas" lista exatamente as 2 categorias sem candidatura.
+- [x] **5.4** Candidatar-se: modal abre com a categoria correta; contador de caracteres cresce ao digitar; acima de 280 fica vermelho e o submit desabilita.
+- [x] **5.5** Candidatura registrada → card "STATUS: EM DISPUTA" surge com protocolo `#XXX-2025-NN`; badge vira "3/4 Ativas"; a vaga da categoria some.
+- [x] **5.6** **Perfil sincronizado:** abrir `/perfil` → "Minhas Candidaturas" mostra a nova candidatura e o contador do card do eleitor reflete 3.
+- [x] **5.7** Editar pitch (edit_note) → modal em modo edição pré-preenchido; salvar altera o texto no card e no perfil.
+- [x] **5.8** **Compartilhar:** botão share copia o texto formatado (clipboard) → toast de confirmação.
+- [x] **5.9** Com `pg_reveal_at` no passado: cards viram "SELADO PARA A CERIMÔNIA", edição desabilitada, seção de vagas some, share continua.
+- [x] **5.10** Com 4/4: banner "dossiê completo" e nenhuma vaga aberta.
 
 **Status:** `____`
 
@@ -134,17 +143,18 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** regras de voto (1 por categoria, anti-auto-voto, selo, fechamento).
 
-- [ ] **6.1** Deslogado → redirect para `/login` (inclusive digitando a URL direto).
-- [ ] **6.2** Sidebar mostra "0 / 4" e botão "Confirmar e Selar" desabilitado com 0 seleções.
-- [ ] **6.3** Selecionar um indicado → card ganha borda dourada + check; progresso "1 / 4"; clicar de novo desseleciona.
-- [ ] **6.4** **Auto-voto:** logar com username `BetoChave` → o card de `@BetoChave` (Melhor Participação Especial) aparece bloqueado com "voto não permitido (auto-voto é golpe)" e não é selecionável.
-- [ ] **6.5** Voto em branco: selar com apenas 2 de 4 categorias selecionadas → o modal lista as demais como "Voto em branco".
-- [ ] **6.6** Confirmar → modal "Selar votos na urna?" lista todas as escolhas; "Cancelar" volta sem selar.
-- [ ] **6.7** Selar → estado "Votos Selados na Cripta!" com hash `#GALA-2025-XXXXXX` e horário do registro.
-- [ ] **6.8** Recarregar a página → **continua selado** (persistência em `pg_votes`).
-- [ ] **6.9** Limpar `pg_votes` no DevTools e recarregar → cédula reabre.
-- [ ] **6.10** Com `pg_reveal_at` no passado → estado "As Urnas Estão Fechadas" (sem cédula).
-- [ ] **6.11** "Fechamento das Urnas" na sidebar mostra contagem regressiva alinhada com `pg_reveal_at`.
+- [x] **6.1** Deslogado → redirect para `/login` (inclusive digitando a URL direto).
+- [x] **6.2** Sidebar mostra "0 / 4" e botão "Confirmar e Selar" desabilitado com 0 seleções.
+- [x] **6.3** Selecionar um indicado → card ganha borda dourada + check; progresso "1 / 4"; clicar de novo desseleciona.
+- [x] **6.4** **Auto-voto:** registrar (e logar com) o username `BetoChave` — ele não existe no seed → o card de `@BetoChave` (Melhor Participação Especial) aparece bloqueado com "voto não permitido (auto-voto é golpe)" e não é selecionável. Depois deslogar e voltar para o usuário principal.
+- [x] **6.5** Voto em branco: selar com apenas 2 de 4 categorias selecionadas → o modal lista as demais como "Voto em branco".
+- [x] **6.6** Confirmar → modal "Selar votos na urna?" lista todas as escolhas; "Cancelar" volta sem selar.
+- [x] **6.7** Selar → estado "Votos Selados na Cripta!" com hash `#GALA-2025-XXXXXX` e horário do registro.
+- [x] **6.8** Recarregar a página → **continua selado** (persistência em `pg_votes:u<id>`).
+- [x] **6.9** Limpar `pg_votes:u<id>` no DevTools e recarregar → cédula reabre.
+- [x] **6.10** Com `pg_reveal_at` no passado → estado "As Urnas Estão Fechadas" (sem cédula).
+- [x] **6.11** "Fechamento das Urnas" na sidebar mostra contagem regressiva alinhada com `pg_reveal_at`.
+- [x] **6.12** **Isolamento por eleitor:** selar votos com o usuário A → deslogar → logar com o usuário B → a cédula de B abre **em branco** (0/4), sem herdar o selo de A. Repetir o inverso. Candidaturas e avatar também são privativos por eleitor.
 
 **Status:** `____`
 
@@ -161,8 +171,9 @@ manualmente todas as chaves `pg_*` no DevTools.
 - [ ] **7.5** **Trocar @handle:** salvar → feedback de nova credencial emitida; a sessão **continua válida** (novo JWT trocado em `pg_token`); `/api/me` retorna o handle novo.
 - [ ] **7.6** **Handle duplicado:** tentar trocar para um username já existente (ex.: `maria`) → erro "Este nome de usuário já foi registrado em cartório".
 - [ ] **7.7** **Trocar senha:** senha atual errada → "A senha atual não confere"; senhas novas divergentes → validação local; sucesso → limpa campos, e logout + login com a senha nova funciona.
-- [ ] **7.8** Honrarias, Minhas Candidaturas e Atividade Recente renderizam os mocks (candidaturas vindas do store compartilhado).
-- [ ] **7.9** **Logout:** botão limpa `pg_token`/`pg_user` e redireciona para `/`; avatar no header volta ao estado deslogado.
+- [x] **7.8** Honrarias, Minhas Candidaturas e Atividade Recente renderizam os mocks (candidaturas vindas do store compartilhado).
+- [x] **7.9** **Logout:** botão limpa `pg_token`/`pg_user` e redireciona para `/`; avatar no header volta ao estado deslogado.
+- [x] **7.10** **Reatividade da credencial (pós-ADR-0001):** logado, trocar o vulgo → o nome novo aparece **na hora** no card do perfil E no Header, sem reload; trocar o @handle → idem, e os campos do formulário acompanham.
 
 **Status:** `____`
 
@@ -264,6 +275,44 @@ manualmente todas as chaves `pg_*` no DevTools.
 | 2.2 | Registro | `UserCreate` no backend não validava tamanho do username (aceitava 1+ char se o frontend fosse burlado; `UserUpdate` já tinha `min_length=3`). **Corrigido durante a verificação:** `Field(min_length=3, max_length=30)` adicionado, uvicorn reiniciado, retestado via curl (curto → 422). | MINOR | Corrigido |
 | 2.6 | Doc | Exemplo do teste usava `joao`, que não existe no seed (o username real é `joaorei`). Causou falso-negativo na primeira rodada do teste. **Doc corrigido** (também na lista do seed e no teste 3.1). | MINOR | Corrigido |
 | 3.8 | Login | Login/registro sempre levavam a `/votar`, ignorando o destino que motivou o acesso (ex.: clicar no avatar deslogado → login → cair na urna em vez do perfil). **Corrigido:** convenção `location.state.from` em 7 pontos — `useVoteNav` (from /votar), avatar do Header (from /perfil), guards de VotePage/ProfilePage/CandidacyPage, e `LoginPage`/`RegisterPage` consomem `state?.from` com fallback `/votar` + `replace: true`. Build OK. | MAJOR | Corrigido |
-| — | Código | Comentários em espanhol em arquivos legados do @dev (`useAuth.jsx`, `VotePage.jsx`, `ProfilePage.jsx`, `CandidacyPage.jsx`, `schemas.py`). Convenção do projeto é pt-BR. Consolidar numa passada de limpeza. | POLISH | Aberto |
+| — | Código | Comentários em espanhol em arquivos legados do @dev (`useAuth.jsx`, `VotePage.jsx`, `ProfilePage.jsx`, `CandidacyPage.jsx`, `schemas.py`). Convenção do projeto é pt-BR. **Corrigido:** varredura completa — `useAuth.jsx` (reescrito no fix do AuthProvider), `VotePage`, `ProfilePage`, `CandidacyPage`, `ResultsPage`, `schemas.py`, componentes da cédula (`CategorySection`, `NomineeCard`, `ConfirmModal`) e resquícios do `useBallot`. Grep final: zero comentários em espanhol. | POLISH | Corrigido |
+| 8.9 | Admin | **Logout do painel não refletia na página:** `useAdminAuth` tinha o mesmo defeito de estado fragmentado do antigo `useAuth` — `AdminPage` e `AdminPanel` criavam instâncias independentes; clicar em "Sair" não exibia o gate sem reload. **Corrigido:** `AdminAuthProvider` (contexto único, mesmo padrão do AuthProvider), envolvido em `App.jsx`. Arquivo renomeado para `.jsx` (JSX do provider não compila em `.js`). | MAJOR | Corrigido |
+| 8.8 | Admin | **Zona de Perigo não sincronizava estados:** `wipeAll` limpava as chaves `pg_*` do storage mas o Header continuava mostrando usuário logado e o painel aberto até reload. **Corrigido:** após limpar, chama `logoutAdmin()` + `logout()` (providers reagem na hora) e navega para `/` com `replace`. | MAJOR | Corrigido |
+| 3.1 | Login/DB | `joaorei` e `test` rejeitavam a senha do seed (`123`) — foram criados numa execução anterior com outra senha e o `seed.py` pula usuários existentes (comportamento correto, só não detecta drift). **Corrigido:** hashes resetados para `123` via `get_password_hash`. Matriz re-testada: 7/7 usuários → 200; round-trip token → `/api/me` OK. | MINOR | Corrigido |
+| 6.12 | Cédula | **Votos vazavam entre eleitores:** `pg_votes`/`pg_votes_meta` eram chaves globais — selar com o usuário A fazia o usuário B herdar a cédula selada de A. Mesma classe de bug em `pg_candidacies` (dossiê) e `pg_avatar` (foto). **Corrigido:** escopo por `user.id` (`pg_votes:u<id>` etc.) via novo util `utils/userScope.js` (fonte única), aplicado em `useBallot`, `useCandidacies` e `ProfileHeader`, com re-sincronização na hidratação do `useAuth`. Escopo por id (não username) sobrevive à troca de @handle. `pg_reveal_at` permanece global (config da gala). Chaves legadas sem escopo são ignoradas — votos/candidaturas anteriores ao fix precisam ser refeitos. Build OK. | MAJOR | Corrigido |
+| 7.10 | Perfil | **Estado de auth fragmentado (reportado pelo usuário):** cada componente criava sua própria instância de `useAuth` (estado próprio) — trocar vulgo/handle atualizava só o formulário; Header e card do perfil exigiam reload. Era o cenário previsto no ADR-0001. **Corrigido:** `AuthProvider` (contexto único no topo da árvore, em `App.jsx`) com a interface pública intacta — zero mudanças nos consumidores. ADR-0001 movido para "Aceito (AuthProvider implementado; Header persistente pendente)". Comentários do arquivo reescritos em pt-BR. Build OK. | MAJOR | Corrigido |
 
 Severidade sugerida: `BLOQUEIO` (impede o fluxo), `MAJOR` (funcionalidade errada), `MINOR` (visual/texto), `POLISH` (melhoria).
+
+---
+
+## Fase 2 (planejada) — Integração dos mocks com o backend real
+
+Decisão tomada durante a verificação: terminar as tasks 6–7 (checkpoint), depois
+substituir os mocks que já têm endpoint no backend, e re-verificar de forma
+enxuta (não do zero). O backend já expõe: `GET /api/categories`,
+`POST /api/candidacies`, `PUT /api/candidacies/{id}`, `POST /api/votes`,
+`GET /api/results`, `GET /api/state`, `POST /api/admin/login`,
+`PUT /api/admin/settings`.
+
+| Mock atual | Substituto real | Pendências |
+|------------|-----------------|------------|
+| `useBallot` (pg_votes) | `GET /api/categories` + `POST /api/votes` | regra de auto-voto (403) no backend |
+| `useCandidacies` (pg_candidacies) | `POST/PUT /api/candidacies` | validar limite 4 + pitch 280 no backend |
+| Countdown/isClosed (landing, cédula, urna, reveal, resultados) | `GET /api/state` (`reveal_at`, `votacao_aberta`) | remove a tríade `pg_reveal_at` |
+| `useAdminAuth` (senha em env) | `POST /api/admin/login` + `PUT /api/admin/settings` | admin JWT real |
+| `mockResults` | `GET /api/results` | bloqueio 403 real |
+| Stats da landing ("1.428 votos") | `/api/state` (`total_votos`) | vitória barata |
+| Avatar (`pg_avatar:u<id>`) | **Novo endpoint** `POST /api/users/me/avatar` | **Requisitos de segurança (decisão do dono):** armazenar em volume Docker dedicado (nunca no PC do usuário); validação **server-side** do tipo real do arquivo (magic bytes JPEG/PNG/WebP — o `accept="image/*"` do input é só UX, burlável via curl); limite de tamanho (200KB); nome de arquivo aleatório no servidor (nunca o original); servir via endpoint com `Content-Type` correto — nunca executável. **Nuance de arquitetura:** o endpoint não depende do Docker — na Fase 2 salva em `backend/uploads/` (diretório do servidor); na fase de deploy o diretório vira volume nomeado no compose, sem mudança de código. |
+
+**Permanecem mock por design** (cosméticos, sem endpoint): chat do reveal,
+player de áudio, honrarias, hash fake do selo, avatar (até existir endpoint
+de upload).
+
+## Fase 3 (planejada) — Re-verificação enxuta pós-integração
+
+Novo roteiro curto cobrindo apenas: fluxo de voto real (incl. auto-voto 403),
+candidaturas reais (limites no servidor), countdown/estados via `/api/state`,
+admin JWT, resultados com bloqueio, end-to-end de verdade e limpeza das
+chaves `pg_*` remanescentes. As tasks 1–5 deste documento permanecem válidas
+como registro histórico (auth real e fluxos de UI não mudam).
