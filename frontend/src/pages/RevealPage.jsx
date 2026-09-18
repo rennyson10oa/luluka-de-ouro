@@ -31,19 +31,6 @@ function formatCountdown(diff) {
   return `${pad(days)}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
 }
 
-/** toast simples no padrão do AdminPanel (estado + fixed bottom-right). */
-function useToast() {
-  const [toast, setToast] = useState(null)
-  const timer = useRef(null)
-  function showToast(msg) {
-    setToast(msg)
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => setToast(null), 3000)
-  }
-  useEffect(() => () => clearTimeout(timer.current), [])
-  return { toast, showToast }
-}
-
 export default function RevealPage() {
   const [isLocked, setIsLocked] = useState(() => computeIsLocked())
   const [rehearsal, setRehearsal] = useState(false) // modo ensaio: destrava sem tocar storage
@@ -55,13 +42,16 @@ export default function RevealPage() {
   const [autoplay, setAutoplay] = useState(false)
 
   const confettiRef = useRef(null)
-  const { toast, showToast } = useToast()
 
   const total = RESULT_CATEGORIES.length
   const category = RESULT_CATEGORIES[catIndex]
   const isFinale = catIndex === total - 1 && revealed
   const revealedCount = catIndex + (revealed ? 1 : 0)
   const progressPct = Math.round((revealedCount / total) * 100)
+  // A cerimônia está ativa quando não há lock OU quando está em modo ensaio.
+  // Os efeitos abaixo usam ESTA condição (não isLocked): no ensaio, isLocked
+  // permanece true e travaria autoplay/teclado.
+  const isOpen = !isLocked || rehearsal
 
   // Contagem regressiva no estado trancado
   useEffect(() => {
@@ -102,7 +92,7 @@ export default function RevealPage() {
 
   // Autoplay: suspense → revela; revelado → avança (com cleanup rigoroso)
   useEffect(() => {
-    if (!autoplay || isLocked) return undefined
+    if (!autoplay || !isOpen) return undefined
     const delay = revealed ? 4000 : 3000
     const id = setTimeout(() => {
       if (!revealed) {
@@ -115,7 +105,7 @@ export default function RevealPage() {
       }
     }, delay)
     return () => clearTimeout(id)
-  }, [autoplay, revealed, catIndex]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoplay, revealed, catIndex, isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Finale: chuva dupla de confete ao entrar
   useEffect(() => {
@@ -128,7 +118,7 @@ export default function RevealPage() {
 
   // Teclado: Espaço/→ avança estágio, ← volta
   useEffect(() => {
-    if (isLocked && !rehearsal) return undefined
+    if (!isOpen) return undefined
     function onKey(e) {
       if (e.code === 'Space' || e.code === 'ArrowRight') {
         e.preventDefault()
@@ -140,7 +130,7 @@ export default function RevealPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [revealed, catIndex]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [revealed, catIndex, isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------- ESTADO: TRANCADO ----------------------
   if (isLocked && !rehearsal) {
@@ -336,13 +326,6 @@ export default function RevealPage() {
       </button>
 
       <Footer />
-
-      {toast && (
-        <div className="fixed bottom-24 right-6 z-50 bg-surface-container-highest/95 backdrop-blur-xl px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 border border-primary-container/30">
-          <span className="material-symbols-outlined text-primary text-[20px]">check_circle</span>
-          <span className="font-sans text-body-md text-on-surface">{toast}</span>
-        </div>
-      )}
     </div>
   )
 }

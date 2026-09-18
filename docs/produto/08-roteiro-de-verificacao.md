@@ -183,15 +183,15 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** gate de acesso e governança da gala.
 
-- [ ] **8.1** Senha errada → banner "Senha soberana incorreta" + shake.
-- [ ] **8.2** Senha correta (`luluka2025` ou `VITE_ADMIN_PASSWORD`) → painel com identidade `@AdminMor` no HeaderAdmin.
-- [ ] **8.3** Fechar a aba e reabrir → sessão admin **morre** (sessionStorage) → gate novamente.
-- [ ] **8.4** Stats e categorias renderizam; accordion abre/fecha com indicados e barras de votos.
-- [ ] **8.5** Audit log: filtro por eleitor/categoria funciona; filtro sem resultado mostra estado vazio.
-- [ ] **8.6** **Agendar reveal:** definir data futura → toast de sucesso; verificar que `pg_reveal_at` foi gravado e que a **contagem da landing** passa a contar para essa data.
-- [ ] **8.7** Com reveal agendado no futuro: `/reveal` trancado e `/resultados` trancados (ver Tasks 9/10).
-- [ ] **8.8** **Zona de Perigo:** "Zerar Tudo Agora" → confirm nativo; confirmar → todas as chaves `pg_*` removidas, usuário e admin deslogados.
-- [ ] **8.9** Botão "Sair" do HeaderAdmin encerra só a sessão admin (usuário permanece logado).
+- [x] **8.1** Senha errada → banner "Senha soberana incorreta" + shake.
+- [x] **8.2** Senha correta (`luluka2025` ou `VITE_ADMIN_PASSWORD`) → painel com identidade `@AdminMor` no HeaderAdmin.
+- [x] **8.3** Fechar a aba e reabrir → sessão admin **morre** (sessionStorage) → gate novamente.
+- [x] **8.4** Stats e categorias renderizam; accordion abre/fecha com indicados e barras de votos.
+- [x] **8.5** Audit log: filtro por eleitor/categoria funciona; filtro sem resultado mostra estado vazio.
+- [x] **8.6** **Agendar reveal:** definir data futura → toast de sucesso; verificar que `pg_reveal_at` foi gravado e que a **contagem da landing** passa a contar para essa data.
+- [x] **8.7** Com reveal agendado no futuro: `/reveal` trancado e `/resultados` trancados (ver Tasks 9/10).
+- [x] **8.8** **Zona de Perigo:** "Zerar Tudo Agora" → confirm nativo; confirmar → todas as chaves `pg_*` removidas, usuário e admin deslogados.
+- [x] **8.9** Botão "Sair" do HeaderAdmin encerra só a sessão admin (usuário permanece logado).
 
 **Status:** `____`
 
@@ -201,7 +201,7 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** máquina de estados da cerimônia, suspense, autoplay e teclado.
 
-- [ ] **9.1** Com reveal agendado no futuro: estado trancado com contagem regressiva; "entrar em modo ensaio" destrava sem alterar `pg_reveal_at`.
+- [ ] **9.1** Com reveal agendado no futuro: estado trancado com contagem regressiva; "entrar em modo ensaio" destrava sem alterar `pg_reveal_at`. Obs.: se o countdown chegar a zero com a tela aberta, o destravamento automático só ocorre ao recarregar (limitação do mock — o estado é calculado no mount).
 - [ ] **9.2** Estado suspense: "E o vencedor é..." com pontos pulsando; "Revelar Vencedor" transiciona com shake + burst de confete.
 - [ ] **9.3** Estado revelado: vencedor ouro com pct/votos, player de áudio **falso** (play/pause anima a barrinha), reações, pódio lateral 🥈🥉🎖️ com os detalhes, chat ao vivo injetando mensagens a cada ~4s.
 - [ ] **9.4** **Teclado:** Espaço e → avançam (suspense → revelado → próxima categoria); ← volta; Espaço não rola a página.
@@ -278,6 +278,7 @@ manualmente todas as chaves `pg_*` no DevTools.
 | — | Código | Comentários em espanhol em arquivos legados do @dev (`useAuth.jsx`, `VotePage.jsx`, `ProfilePage.jsx`, `CandidacyPage.jsx`, `schemas.py`). Convenção do projeto é pt-BR. **Corrigido:** varredura completa — `useAuth.jsx` (reescrito no fix do AuthProvider), `VotePage`, `ProfilePage`, `CandidacyPage`, `ResultsPage`, `schemas.py`, componentes da cédula (`CategorySection`, `NomineeCard`, `ConfirmModal`) e resquícios do `useBallot`. Grep final: zero comentários em espanhol. | POLISH | Corrigido |
 | 8.9 | Admin | **Logout do painel não refletia na página:** `useAdminAuth` tinha o mesmo defeito de estado fragmentado do antigo `useAuth` — `AdminPage` e `AdminPanel` criavam instâncias independentes; clicar em "Sair" não exibia o gate sem reload. **Corrigido:** `AdminAuthProvider` (contexto único, mesmo padrão do AuthProvider), envolvido em `App.jsx`. Arquivo renomeado para `.jsx` (JSX do provider não compila em `.js`). | MAJOR | Corrigido |
 | 8.8 | Admin | **Zona de Perigo não sincronizava estados:** `wipeAll` limpava as chaves `pg_*` do storage mas o Header continuava mostrando usuário logado e o painel aberto até reload. **Corrigido:** após limpar, chama `logoutAdmin()` + `logout()` (providers reagem na hora) e navega para `/` com `replace`. | MAJOR | Corrigido |
+| 9.5 | Reveal | **Autoplay e teclado mortos no modo ensaio** (auto-auditoria da Task 9): os efeitos testavam `isLocked` em vez da condição de render (`!isLocked \|\| rehearsal`) — como `isLocked` nunca muda de valor, no ensaio o autoplay nunca disparava e o teclado só funcionava após a 1ª revelação. **Corrigido:** condição unificada `isOpen` nas dependências dos dois efeitos. Também removido `useToast` morto (nunca chamado). Build OK. | MAJOR | Corrigido |
 | 3.1 | Login/DB | `joaorei` e `test` rejeitavam a senha do seed (`123`) — foram criados numa execução anterior com outra senha e o `seed.py` pula usuários existentes (comportamento correto, só não detecta drift). **Corrigido:** hashes resetados para `123` via `get_password_hash`. Matriz re-testada: 7/7 usuários → 200; round-trip token → `/api/me` OK. | MINOR | Corrigido |
 | 6.12 | Cédula | **Votos vazavam entre eleitores:** `pg_votes`/`pg_votes_meta` eram chaves globais — selar com o usuário A fazia o usuário B herdar a cédula selada de A. Mesma classe de bug em `pg_candidacies` (dossiê) e `pg_avatar` (foto). **Corrigido:** escopo por `user.id` (`pg_votes:u<id>` etc.) via novo util `utils/userScope.js` (fonte única), aplicado em `useBallot`, `useCandidacies` e `ProfileHeader`, com re-sincronização na hidratação do `useAuth`. Escopo por id (não username) sobrevive à troca de @handle. `pg_reveal_at` permanece global (config da gala). Chaves legadas sem escopo são ignoradas — votos/candidaturas anteriores ao fix precisam ser refeitos. Build OK. | MAJOR | Corrigido |
 | 7.10 | Perfil | **Estado de auth fragmentado (reportado pelo usuário):** cada componente criava sua própria instância de `useAuth` (estado próprio) — trocar vulgo/handle atualizava só o formulário; Header e card do perfil exigiam reload. Era o cenário previsto no ADR-0001. **Corrigido:** `AuthProvider` (contexto único no topo da árvore, em `App.jsx`) com a interface pública intacta — zero mudanças nos consumidores. ADR-0001 movido para "Aceito (AuthProvider implementado; Header persistente pendente)". Comentários do arquivo reescritos em pt-BR. Build OK. | MAJOR | Corrigido |
