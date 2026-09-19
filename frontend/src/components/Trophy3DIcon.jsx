@@ -29,7 +29,7 @@ function ProceduralEnv() {
   return null;
 }
 
-function TrophyIconModel() {
+function TrophyIconModel({ zoom = 1, shiftY = 0, shiftX = 0 }) {
   const { scene } = useGLTF(GLB_PATH);
   const groupRef = useRef();
 
@@ -89,8 +89,14 @@ function TrophyIconModel() {
   });
 
   return (
-    <group ref={groupRef} rotation={[0.12, 0, 0]}>
-      <primitive object={model} scale={fit} position={[offset.x, offset.y, offset.z]} dispose={null} />
+    // Grupo externo: zoom + deslocamento (MobileMenu usa zoom > 1 com
+    // shiftY < 0 para a taça ENCHER a tela e shiftX para sair do centro).
+    // O giro fica no grupo interno — o eixo de rotação acompanha o centro
+    // do próprio modelo, mesmo escalado/deslocado.
+    <group scale={zoom} position={[shiftX, shiftY, 0]}>
+      <group ref={groupRef} rotation={[0.12, 0, 0]}>
+        <primitive object={model} scale={fit} position={[offset.x, offset.y, offset.z]} dispose={null} />
+      </group>
     </group>
   );
 }
@@ -105,11 +111,14 @@ function TrophyIconFallback() {
 }
 
 /**
- * Trophy3DIcon — troféu 3D girando para o logo do Header.
- * Aceita width/height em px (o Header usa 40x40) e o conteúdo sempre
- * preenche 100% do canvas, encaixado pelo auto-fit do bounding box.
+ * Trophy3DIcon — troféu 3D girando para o logo do Header (ou para o
+ * menu mobile em tela cheia). Aceita width/height em px ou string CSS.
+ * Props opcionais de enquadramento (padrões preservam o uso do Header):
+ *   - zoom: multiplicador de escala sobre o auto-fit (1 = modelo inteiro).
+ *   - shiftY: deslocamento vertical em unidades do mundo (negativo = desce).
+ *   - shiftX: deslocamento horizontal (positivo = vai para a direita).
  */
-export default function Trophy3DIcon({ width = 40, height = 40 }) {
+export default function Trophy3DIcon({ width = 40, height = 40, zoom = 1, shiftY = 0, shiftX = 0 }) {
   return (
     <div style={{ width, height }} className="bg-transparent" aria-label="Troféu 3D Prêmios do Grupo">
       <Canvas
@@ -131,7 +140,7 @@ export default function Trophy3DIcon({ width = 40, height = 40 }) {
 
         <Suspense fallback={<TrophyIconFallback />}>
           <Float speed={1.5} rotationIntensity={0} floatIntensity={0.4} floatingRange={[-0.08, 0.08]}>
-            <TrophyIconModel />
+            <TrophyIconModel zoom={zoom} shiftY={shiftY} shiftX={shiftX} />
           </Float>
         </Suspense>
       </Canvas>

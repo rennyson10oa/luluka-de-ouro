@@ -65,15 +65,22 @@ export default function MobileMenu({ open, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true" aria-label="Menu de navegação da gala">
-      {/* Fundo: vinheta dourada + troféu 3D girando em tela cheia */}
+      {/* Fundo: vinheta dourada + taça 3D GIGANTE girando, deslocada para a
+          direita e ATENUADA (filter brightness) para as opções ficarem
+          legíveis por cima. Modelo/cache reaproveitado do Trophy3DIcon. */}
       <div className="absolute inset-0 bg-surface/95 backdrop-blur-xl" onClick={onClose} aria-hidden="true" />
       <div
-        className="absolute top-[38%] left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+        className="absolute inset-0 pointer-events-none"
+        style={{ filter: 'brightness(0.55)' }}
         aria-hidden="true"
       >
-        <Trophy3DIcon width="100vw" height={420} />
+        <Trophy3DIcon width="100%" height="100vh" zoom={2.6} shiftY={-1.15} shiftX={0.85} />
       </div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[380px] bg-primary/10 blur-[110px] rounded-full pointer-events-none" aria-hidden="true" />
+      {/* Scrim superior — legibilidade das opções sobre a taça */}
+      <div
+        className="absolute inset-x-0 top-0 h-[62%] bg-gradient-to-b from-surface/90 via-surface/70 to-transparent pointer-events-none"
+        aria-hidden="true"
+      />
 
       {/* Botão de fechar */}
       <button
