@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../hooks/useAuth'
 import useVoteNav from '../hooks/useVoteNav'
 import Trophy3DIcon from './Trophy3DIcon'
+import MobileMenu from './MobileMenu'
 
 // ---------------------------------------------------------------------------
 // HeaderMaster — barra de navegação global, fixa no topo (default export)
@@ -12,6 +14,7 @@ export default function Header() {
   const goVote = useVoteNav()
   const navigate = useNavigate()
   const location = useLocation()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   // Determina qual item da nav está ativo com base no pathname + hash
   const currentPath = location.pathname + location.hash
@@ -107,6 +110,19 @@ export default function Header() {
 
           {/* Perfil / Avatar */}
           <div className="flex items-center gap-2 pl-2 border-l border-outline-variant/50">
+            {/* Mobile: o clique no avatar abre o menu de navegação em tela
+                cheia (MobileMenu) — pedido do dono, com a taça 3D girando. */}
+            <button
+              type="button"
+              title="Navegação da Gala"
+              onClick={() => setMenuOpen(true)}
+              className="w-9 h-9 rounded-full bg-surface-container border border-primary-container/40 flex items-center justify-center hover:border-primary-container transition-colors relative md:hidden"
+            >
+              <span className="material-symbols-outlined text-xl text-on-surface-variant">person</span>
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-surface rounded-full" />
+            </button>
+
+            {/* Desktop: vai direto ao perfil (ou ao login com memória do destino) */}
             <button
               type="button"
               title={isAuthenticated ? `Perfil de @${user?.username}` : 'Entrar na Gala'}
@@ -119,7 +135,7 @@ export default function Header() {
                   navigate('/login', { state: { from: '/perfil' } })
                 }
               }}
-              className="w-9 h-9 rounded-full bg-surface-container border border-primary-container/40 flex items-center justify-center hover:border-primary-container transition-colors relative"
+              className="hidden md:flex w-9 h-9 rounded-full bg-surface-container border border-primary-container/40 items-center justify-center hover:border-primary-container transition-colors relative"
             >
               <span className="material-symbols-outlined text-xl text-on-surface-variant">person</span>
               <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-surface rounded-full" />
@@ -127,6 +143,7 @@ export default function Header() {
           </div>
         </div>
       </div>
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
     </header>
   )
 }

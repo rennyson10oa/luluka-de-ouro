@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import { Footer } from '../components/Footer'
@@ -57,7 +57,7 @@ function ResultsHero({ onDownload, onShare }) {
         <span className="gold-gradient-text">Resultados {RESULTS_META.edition}</span>
       </h1>
 
-      {/* Ações: PDF (ghost) + Compartir (dourado) */}
+      {/* Ações: PDF (ghost) + Compartilhar (dourado) */}
       <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
         <button
           type="button"
@@ -178,7 +178,7 @@ function BehindTheScenes() {
 }
 
 /**
- * FinalCta — brinde de encerramento + navegación de salida.
+ * FinalCta — brinde de encerramento + navegação de saída.
  */
 function FinalCta({ onReplay }) {
   return (
@@ -189,7 +189,7 @@ function FinalCta({ onReplay }) {
         Um Brinde à Próxima Temporada 🥂
       </h2>
       <p className="font-sans text-body-md text-on-surface-variant max-w-xl">
-        Que 2026 traiga vergonhas ainda mais cinematográficas, áudios ainda mais longos e prints ainda mais comprometedores.
+        Que 2026 traga vergonhas ainda mais cinematográficas, áudios ainda mais longos e prints ainda mais comprometedores.
       </p>
       <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
         <Link
@@ -218,23 +218,33 @@ function FinalCta({ onReplay }) {
  * futuro (cerimônia pendente); ausente ou passada → galeria aberta.
  */
 export default function ResultsPage() {
-  const [isLocked] = useState(() => computeIsLocked())
+  const [isLocked, setIsLocked] = useState(() => computeIsLocked())
   const [toast, setToast] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
+
+  // Destrava sozinho quando o relógio do reveal passa — sem exigir reload
+  // (mesmo comportamento do RevealPage; reportado no ensaio da Task 11).
+  useEffect(() => {
+    if (!isLocked) return undefined
+    const id = setInterval(() => {
+      if (!computeIsLocked()) setIsLocked(false)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [isLocked])
 
   function showToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 3200)
   }
 
-  // Compartir: navigator.share si existe; si no, copia del link al portapapeles.
+  // Compartilhar: navigator.share se existir; senão, copia o link para a área de transferência.
   function handleShare() {
     const url = window.location.href
     if (navigator.share) {
       navigator
         .share({
           title: `Galeria Oficial de Resultados ${RESULTS_META.edition}`,
-          text: 'Ata homologada! Confere los vencedores de la gala del grupo.',
+          text: 'Ata homologada! Confira os vencedores da gala do grupo.',
           url,
         })
         .then(() => showToast('Compartilhado com sucesso!'))
@@ -251,14 +261,14 @@ export default function ResultsPage() {
     }
   }
 
-  // Categorías visibles según el filtro activo.
+  // Categorias visíveis conforme o filtro ativo.
   const filteredCategories =
     activeFilter === 'all'
       ? RESULT_CATEGORIES
       : RESULT_CATEGORIES.filter((cat) => cat.id === activeFilter)
 
   // O número da categoria vem da posição original no dataset
-  // (así, filtrar "Mitadas" sigue mostrando "Categoria 03").
+  // (assim, filtrar "Mitadas" continua mostrando "Categoria 03").
   function categoryNumber(cat) {
     return RESULT_CATEGORIES.findIndex((c) => c.id === cat.id) + 1
   }
@@ -269,7 +279,7 @@ export default function ResultsPage() {
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
         <Header />
         <main className="flex-grow relative flex flex-col items-center justify-center px-6 pt-28 pb-16 overflow-hidden">
-          {/* Vinheta ambiental dorada */}
+          {/* Vinheta ambiental dourada */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
             <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[650px] h-[650px] bg-gradient-to-tr from-primary-container/15 via-primary/10 to-transparent rounded-full blur-[120px] opacity-70" />
             <div className="absolute -top-24 right-1/4 w-[420px] h-[420px] bg-tertiary-container/10 rounded-full blur-[100px]" />
@@ -303,7 +313,7 @@ export default function ResultsPage() {
     <div className="min-h-screen flex flex-col bg-surface text-on-surface">
       <Header />
       <main className="flex-grow w-full max-w-7xl mx-auto px-6 lg:px-12 pt-28 pb-24 relative isolate">
-        {/* Blobs dorados sutiles de fondo */}
+        {/* Blobs dourados sutis de fundo */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10" aria-hidden="true">
           <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[850px] h-[550px] bg-primary/10 blur-[130px] rounded-full" />
           <div className="absolute top-[30%] right-[-10%] w-[500px] h-[500px] bg-tertiary-container/10 blur-[150px] rounded-full" />
@@ -317,7 +327,7 @@ export default function ResultsPage() {
             onShare={handleShare}
           />
 
-          {/* Métricas clave */}
+          {/* Métricas principais */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
             {GALLERY_STATS.map((s) => (
               <GalleryStatCard key={s.label} {...s} />
@@ -331,7 +341,7 @@ export default function ResultsPage() {
           <div className="flex flex-col gap-space-xl">
             {filteredCategories.length === 0 ? (
               <p className="text-center font-sans text-body-sm text-on-surface-variant">
-                Nenhuna categoria encontrada para este filtro.
+                Nenhuma categoria encontrada para este filtro.
               </p>
             ) : (
               filteredCategories.map((cat) => (
@@ -340,7 +350,7 @@ export default function ResultsPage() {
             )}
           </div>
 
-          {/* Bastidores de la votación */}
+          {/* Bastidores da votação */}
           <BehindTheScenes />
 
           {/* CTA final */}
@@ -349,7 +359,7 @@ export default function ResultsPage() {
       </main>
       <Footer />
 
-      {/* Toast (padrón AdminPanel/ProfilePage) */}
+      {/* Toast (padrão AdminPanel/ProfilePage) */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-surface-container-highest/95 backdrop-blur-xl px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 border border-primary-container/30">
           <span className="material-symbols-outlined text-primary text-[20px]">check_circle</span>

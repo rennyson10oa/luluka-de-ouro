@@ -93,7 +93,7 @@ export default function ProfilePage() {
       </main>
       <Footer />
 
-      {/* ---- Toast (padrón AdminPanel) ---- */}
+      {/* ---- Toast (padrão AdminPanel) ---- */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-surface-container-highest/95 backdrop-blur-xl px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 border border-primary-container/30">
           <span className="material-symbols-outlined text-primary text-[20px]">check_circle</span>

@@ -201,7 +201,7 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** máquina de estados da cerimônia, suspense, autoplay e teclado.
 
-- [ ] **9.1** Com reveal agendado no futuro: estado trancado com contagem regressiva; "entrar em modo ensaio" destrava sem alterar `pg_reveal_at`. Obs.: se o countdown chegar a zero com a tela aberta, o destravamento automático só ocorre ao recarregar (limitação do mock — o estado é calculado no mount).
+- [ ] **9.1** Com reveal agendado no futuro: estado trancado com contagem regressiva; "entrar em modo ensaio" destrava sem alterar `pg_reveal_at`. **Corrigido no ensaio da Task 11:** o countdown agora destrava a cerimônia sozinho quando o relógio zera (sem reload); idem na galeria de resultados.
 - [ ] **9.2** Estado suspense: "E o vencedor é..." com pontos pulsando; "Revelar Vencedor" transiciona com shake + burst de confete.
 - [ ] **9.3** Estado revelado: vencedor ouro com pct/votos, player de áudio **falso** (play/pause anima a barrinha), reações, pódio lateral 🥈🥉🎖️ com os detalhes, chat ao vivo injetando mensagens a cada ~4s.
 - [ ] **9.4** **Teclado:** Espaço e → avançam (suspense → revelado → próxima categoria); ← volta; Espaço não rola a página.
@@ -220,15 +220,15 @@ manualmente todas as chaves `pg_*` no DevTools.
 
 **Objetivo:** registro oficial pós-cerimônia, filtros e pódios.
 
-- [ ] **10.1** Página pública: deslogado acessa normalmente (sem guard).
-- [ ] **10.2** Com reveal agendado no futuro → estado trancado "A Cerimônia Ainda Não Aconteceu"; sem agendamento ou no passado → galeria aberta.
-- [ ] **10.3** 4 cards de estatísticas da apuração renderizam.
-- [ ] **10.4** **Filtros:** "Todas as Categorias" mostra os 4 pódios; cada pill isola sua categoria; pill ativa destacada.
-- [ ] **10.5** **Pódio (desktop):** layout 2º | 1º | 3º, com o 1º central elevado (borda dourada, coroa, pct em gradiente).
-- [ ] **10.6** **Pódio (mobile 360px):** ordem 1º → 2º → 3º, empilhados, sem scroll horizontal.
-- [ ] **10.7** Menção honrosa visível em cada categoria, com a frase do meme.
-- [ ] **10.8** Bastidores: 3 estatísticas curiosas renderizam.
-- [ ] **10.9** "Compartilhar" copia o link (toast); "Baixar Relatório em PDF" mostra toast de "em breve"; "Rever Cerimônia Completa" mostra toast; "Voltar ao Início" navega.
+- [x] **10.1** Página pública: deslogado acessa normalmente (sem guard).
+- [x] **10.2** Com reveal agendado no futuro → estado trancado "A Cerimônia Ainda Não Aconteceu"; sem agendamento ou no passado → galeria aberta.
+- [x] **10.3** 4 cards de estatísticas da apuração renderizam.
+- [x] **10.4** **Filtros:** "Todas as Categorias" mostra os 4 pódios; cada pill isola sua categoria; pill ativa destacada.
+- [x] **10.5** **Pódio (desktop):** layout 2º | 1º | 3º, com o 1º central elevado (borda dourada, coroa, pct em gradiente).
+- [x] **10.6** **Pódio (mobile 360px):** ordem 1º → 2º → 3º, empilhados, sem scroll horizontal.
+- [x] **10.7** Menção honrosa visível em cada categoria, com a frase do meme.
+- [x] **10.8** Bastidores: 3 estatísticas curiosas renderizam.
+- [x] **10.9** "Compartilhar" copia o link (toast); "Baixar Relatório em PDF" mostra toast de "em breve"; "Rever Cerimônia Completa" mostra toast; "Voltar ao Início" navega.
 
 **Status:** `____`
 
@@ -279,6 +279,8 @@ manualmente todas as chaves `pg_*` no DevTools.
 | 8.9 | Admin | **Logout do painel não refletia na página:** `useAdminAuth` tinha o mesmo defeito de estado fragmentado do antigo `useAuth` — `AdminPage` e `AdminPanel` criavam instâncias independentes; clicar em "Sair" não exibia o gate sem reload. **Corrigido:** `AdminAuthProvider` (contexto único, mesmo padrão do AuthProvider), envolvido em `App.jsx`. Arquivo renomeado para `.jsx` (JSX do provider não compila em `.js`). | MAJOR | Corrigido |
 | 8.8 | Admin | **Zona de Perigo não sincronizava estados:** `wipeAll` limpava as chaves `pg_*` do storage mas o Header continuava mostrando usuário logado e o painel aberto até reload. **Corrigido:** após limpar, chama `logoutAdmin()` + `logout()` (providers reagem na hora) e navega para `/` com `replace`. | MAJOR | Corrigido |
 | 9.5 | Reveal | **Autoplay e teclado mortos no modo ensaio** (auto-auditoria da Task 9): os efeitos testavam `isLocked` em vez da condição de render (`!isLocked \|\| rehearsal`) — como `isLocked` nunca muda de valor, no ensaio o autoplay nunca disparava e o teclado só funcionava após a 1ª revelação. **Corrigido:** condição unificada `isOpen` nas dependências dos dois efeitos. Também removido `useToast` morto (nunca chamado). Build OK. | MAJOR | Corrigido |
+| 9.1/10.2 | Reveal/Resultados | **Cerimônia trancada em 00:00** (reportado no ensaio da Task 11): o estado de lock era calculado só no mount — countdown chegando a zero com a tela aberta exigia reload manual. **Corrigido:** `RevealPage` destrava no tick em que o relógio zera; `ResultsPage` re-verifica `pg_reveal_at` a cada 1s enquanto trancada. O `VotePage` já fechava de graça (o re-render do countdown dele reavalia `isClosed`). | MAJOR | Corrigido |
+| 9.2 | Reveal | **Primeiro burst de confete agrupado à esquerda** (reportado no ensaio): o `fire()` distribuía partículas antes do primeiro resize — o canvas default de ~300px fazia nascerem só na faixa esquerda (mais visível no burst do 1º reveal). **Corrigido:** `ConfettiCanvas` faz `resize()` no mount e antes de cada burst. | MINOR | Corrigido |
 | 3.1 | Login/DB | `joaorei` e `test` rejeitavam a senha do seed (`123`) — foram criados numa execução anterior com outra senha e o `seed.py` pula usuários existentes (comportamento correto, só não detecta drift). **Corrigido:** hashes resetados para `123` via `get_password_hash`. Matriz re-testada: 7/7 usuários → 200; round-trip token → `/api/me` OK. | MINOR | Corrigido |
 | 6.12 | Cédula | **Votos vazavam entre eleitores:** `pg_votes`/`pg_votes_meta` eram chaves globais — selar com o usuário A fazia o usuário B herdar a cédula selada de A. Mesma classe de bug em `pg_candidacies` (dossiê) e `pg_avatar` (foto). **Corrigido:** escopo por `user.id` (`pg_votes:u<id>` etc.) via novo util `utils/userScope.js` (fonte única), aplicado em `useBallot`, `useCandidacies` e `ProfileHeader`, com re-sincronização na hidratação do `useAuth`. Escopo por id (não username) sobrevive à troca de @handle. `pg_reveal_at` permanece global (config da gala). Chaves legadas sem escopo são ignoradas — votos/candidaturas anteriores ao fix precisam ser refeitos. Build OK. | MAJOR | Corrigido |
 | 7.10 | Perfil | **Estado de auth fragmentado (reportado pelo usuário):** cada componente criava sua própria instância de `useAuth` (estado próprio) — trocar vulgo/handle atualizava só o formulário; Header e card do perfil exigiam reload. Era o cenário previsto no ADR-0001. **Corrigido:** `AuthProvider` (contexto único no topo da árvore, em `App.jsx`) com a interface pública intacta — zero mudanças nos consumidores. ADR-0001 movido para "Aceito (AuthProvider implementado; Header persistente pendente)". Comentários do arquivo reescritos em pt-BR. Build OK. | MAJOR | Corrigido |
@@ -317,3 +319,21 @@ candidaturas reais (limites no servidor), countdown/estados via `/api/state`,
 admin JWT, resultados com bloqueio, end-to-end de verdade e limpeza das
 chaves `pg_*` remanescentes. As tasks 1–5 deste documento permanecem válidas
 como registro histórico (auth real e fluxos de UI não mudam).
+
+---
+
+## Task 13 — Navegação Mobile (feature do ensaio da Task 11)
+
+Design pedido pelo dono durante a Task 11: no mobile não havia navegação
+(o nav pill desaparece em telas pequenas). Solução: clicar no ícone de
+perfil do Header abre um overlay em tela cheia com a **taça 3D girando**
+(modelo `trophy-3d.glb` já carregado/cacheado pelo `useGLTF`) e as opções
+na parte de cima.
+
+- [ ] **13.1** Em 360px, o ícone de perfil (avatar) do Header abre o menu em tela cheia: fundo escuro com a taça 3D girando no centro, opções de navegação no topo.
+- [ ] **13.2** Os links levam aos destinos corretos e **fecham o menu** (Início, Candidaturas, A Cerimônia, Galeria, Painel Admin).
+- [ ] **13.3** "Votação" é auth-aware e fecha o menu antes de navegar.
+- [ ] **13.4** Item de conta: logado → "Perfil de @handle"; deslogado → "Entrar na Gala".
+- [ ] **13.5** Fecha com o X, com a tecla Esc e com clique no fundo; o scroll do body fica travado enquanto aberto.
+- [ ] **13.6** O menu não existe no desktop (`md:hidden`) — o avatar desktop continua indo direto ao perfil.
+- [ ] **13.7** Sem scroll horizontal e sem travar a taça 3D (performance ok no mobile — modelo de 44KB já cacheado).

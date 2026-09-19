@@ -129,7 +129,7 @@ export const RESULT_CATEGORIES = [
     emoji: '👑',
     badge: 'Prêmio Elocuência Desmedida',
     title: 'Membro com Mais Mitadas',
-    quote: 'Para réticas que calaram o grupo e viraram patrimônio histórico',
+    quote: 'Para retóricas que calaram o grupo e viraram patrimônio histórico',
     navLabel: 'Mais Mitadas',
     validVotes: '1.482 Votos Válidos',
     podium: {

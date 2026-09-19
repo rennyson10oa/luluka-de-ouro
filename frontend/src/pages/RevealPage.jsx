@@ -63,7 +63,11 @@ export default function RevealPage() {
       target = new Date()
     }
     function tick() {
-      setCountdown(formatCountdown(Math.max(0, target - Date.now())))
+      const diff = Math.max(0, target - Date.now())
+      setCountdown(formatCountdown(diff))
+      // Destrava sozinho quando o relógio zera — sem exigir reload
+      // (reportado no ensaio da Task 11: a cerimônia ficava trancada em 00:00).
+      if (target <= Date.now()) setIsLocked(false)
     }
     tick()
     const id = setInterval(tick, 1000)

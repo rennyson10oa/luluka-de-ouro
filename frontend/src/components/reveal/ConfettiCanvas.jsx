@@ -18,12 +18,28 @@ const ConfettiCanvas = forwardRef(function ConfettiCanvas(props, ref) {
   const particles = useRef([])
   const rafId = useRef(null)
 
+  /**
+   * Ajusta o canvas à viewport com devicePixelRatio. Chamado no mount e
+   * ANTES de cada burst: sem isso, o primeiro burst distribui partículas
+   * no canvas default de ~300px — aparecendo agrupadas à esquerda até o
+   * primeiro resize (bug reportado no ensaio da Task 11).
+   */
+  function resize() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = window.innerWidth * dpr
+    canvas.height = window.innerHeight * dpr
+    canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0)
+  }
+
   useImperativeHandle(ref, () => ({
     /** Dispara um burst de confete (padrão: 120 partículas). */
     fire(count = 120) {
       const canvas = canvasRef.current
       if (!canvas) return
-      const w = canvas.width / (window.devicePixelRatio || 1)
+      resize() // protege contra canvas default e mudanças de layout
+      const w = window.innerWidth
       for (let i = 0; i < count; i++) {
         particles.current.push({
           x: Math.random() * w,
@@ -46,15 +62,6 @@ const ConfettiCanvas = forwardRef(function ConfettiCanvas(props, ref) {
     if (rafId.current !== null) return // loop já rodando
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
-    const dpr = window.devicePixelRatio || 1
-
-    function resize() {
-      canvas.width = window.innerWidth * dpr
-      canvas.height = window.innerHeight * dpr
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    }
-    resize()
-    window.addEventListener('resize', resize)
 
     function tick() {
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight)
@@ -82,15 +89,17 @@ const ConfettiCanvas = forwardRef(function ConfettiCanvas(props, ref) {
       } else {
         // Sem partículas vivas: encerra o loop (economia de recursos)
         rafId.current = null
-        window.removeEventListener('resize', resize)
       }
     }
     rafId.current = requestAnimationFrame(tick)
   }
 
-  // Cleanup no unmount
+  // Resize no mount + listener contínuo; limpeza completa no unmount.
   useEffect(() => {
+    resize()
+    window.addEventListener('resize', resize)
     return () => {
+      window.removeEventListener('resize', resize)
       if (rafId.current !== null) cancelAnimationFrame(rafId.current)
       particles.current = []
     }

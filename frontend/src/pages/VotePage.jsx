@@ -329,7 +329,7 @@ export default function VotePage() {
                   </div>
                 </div>
 
-                {/* Barra de progreso fina dorada */}
+                {/* Barra de progresso fina dourada */}
                 <div className="w-full h-1.5 rounded-full bg-surface-container-highest overflow-hidden mb-5">
                   <div
                     className="h-full bg-gradient-to-r from-primary-fixed via-primary to-primary-container rounded-full transition-all duration-500"
