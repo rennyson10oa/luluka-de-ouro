@@ -10,8 +10,12 @@
     color: #e4e1e9;
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    overscroll-behavior: none;
+    transition: filter 0.3s ease;
+  }
+
+  /* Menu mobile aberto: desfoca o conteúdo da página atrás do overlay */
+  .menu-blur {
+    filter: blur(10px);
   }
 
   ::-webkit-scrollbar {

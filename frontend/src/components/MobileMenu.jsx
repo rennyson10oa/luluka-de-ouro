@@ -32,7 +32,8 @@ export default function MobileMenu({ open, onClose }) {
   const goVote = useVoteNav()
   const location = useLocation()
 
-  // Esc fecha + trava o scroll do body enquanto o menu está aberto.
+  // Esc fecha + trava o scroll do body + desfoca o <main> da página
+  // atrás do menu (glassmorphism pelo próprio conteúdo da página).
   useEffect(() => {
     if (!open) return undefined
     function onKey(e) {
@@ -40,9 +41,12 @@ export default function MobileMenu({ open, onClose }) {
     }
     window.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
+    const main = document.querySelector('main')
+    main?.classList.add('menu-blur')
     return () => {
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
+      main?.classList.remove('menu-blur')
     }
   }, [open, onClose])
 
@@ -65,10 +69,19 @@ export default function MobileMenu({ open, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true" aria-label="Menu de navegação da gala">
-      {/* Fundo: vinheta dourada + taça 3D GIGANTE girando, deslocada para a
-          direita e ATENUADA (filter brightness) para as opções ficarem
-          legíveis por cima. Modelo/cache reaproveitado do Trophy3DIcon. */}
-      <div className="absolute inset-0 bg-surface/95 backdrop-blur-xl" onClick={onClose} aria-hidden="true" />
+      {/* Pilha (de baixo para cima):
+          1. FUNDO: a página em si já vem desfocada — o <main> ganha a classe
+             .menu-blur (filter: blur(10px)) no efeito acima; esta camada é só
+             um scrim leve para escurecer e recebe o clique para fechar.
+          2. TAÇA 3D: nítida (só atenuada), flutuando SOBRE o fundo.
+          3. Scrim leve no topo + conteúdo (X, card, opções)
+          Modelo/cache reaproveitado do Trophy3DIcon. */}
+      <div
+        className="absolute inset-0 bg-surface/40"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      {/* 2. Taça — nítida, atenuada e deslocada */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{ filter: 'brightness(0.55)' }}
@@ -76,9 +89,9 @@ export default function MobileMenu({ open, onClose }) {
       >
         <Trophy3DIcon width="100%" height="100vh" zoom={2.6} shiftY={-1.15} shiftX={0.85} />
       </div>
-      {/* Scrim superior — legibilidade das opções sobre a taça */}
+      {/* 3. Scrim superior — legibilidade das opções sobre a taça */}
       <div
-        className="absolute inset-x-0 top-0 h-[62%] bg-gradient-to-b from-surface/90 via-surface/70 to-transparent pointer-events-none"
+        className="absolute inset-x-0 top-0 h-[62%] bg-gradient-to-b from-surface/70 via-surface/40 to-transparent pointer-events-none"
         aria-hidden="true"
       />
 
@@ -102,7 +115,10 @@ export default function MobileMenu({ open, onClose }) {
           <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
         </div>
 
-        <nav className="flex flex-col gap-1 max-w-sm w-full mx-auto">
+        {/* Card de agrupamento das opções: o vidro global (layer 3) já
+            desfoque a taça atrás — aqui fica só o fundo + borda, sem um
+            segundo backdrop-blur (custo de composição no mobile). */}
+        <nav className="flex flex-col gap-1 max-w-sm w-full mx-auto rounded-2xl bg-surface-container-low/70 border border-outline-variant/40 shadow-[0_16px_40px_rgba(0,0,0,0.75),0_0_24px_rgba(212,175,55,0.08)] p-2">
           {LINKS.map(({ to, label, icon }) => (
             <Link key={to} to={to} onClick={onClose} className={linkClasses(currentPath === to)}>
               <span className="material-symbols-outlined text-[24px]">{icon}</span>
