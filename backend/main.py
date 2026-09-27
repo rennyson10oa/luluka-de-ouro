@@ -15,6 +15,12 @@ with engine.connect() as conn:
         conn.commit()
     except Exception:
         pass
+    try:
+        # Migração leve da coluna de avatar (idempotente, igual à de vulgo).
+        conn.execute(text("ALTER TABLE users ADD COLUMN avatar VARCHAR"))
+        conn.commit()
+    except Exception:
+        pass
 
 app = FastAPI(title="Zoeira Awards Platform API")
 

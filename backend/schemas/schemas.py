@@ -20,6 +20,8 @@ class UserResponse(BaseModel):
     id: int
     username: str
     vulgo: Optional[str] = None
+    # Caminho relativo salvo no servidor (ex.: "uploads/ab12….png"); None se não houver.
+    avatar: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):

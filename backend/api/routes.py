@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
+from uuid import uuid4
+import os
 from backend.database import get_db
 from backend.models import models
 from backend.schemas import schemas
 from backend.crud import crud
 from backend.core import security
+from backend.core.config import settings as app_settings
 from backend.api import deps
 from pydantic import BaseModel
 
@@ -74,6 +78,66 @@ def update_password(payload: schemas.PasswordChange, db: Session = Depends(get_d
     crud.update_user_password(db, current_user, payload.new_password)
     return {"status": "success"}
 
+@router.post("/users/me/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    # Lê o conteúdo real em memória: não confiamos no Content-Length nem no
+    # accept="image/*" do frontend (ambos são apenas UX e burláveis via curl).
+    data = await file.read()
+
+    # Limite rígido de 200KB (checado no servidor, conforme decisão do dono).
+    if len(data) > 200_000:
+        raise HTTPException(status_code=413, detail="Avatar excede 200KB")
+
+    # Validação server-side por magic bytes (JPEG / PNG / WebP).
+    ext = None
+    if data[:3] == b"\xff\xd8\xff":
+        ext = "jpg"
+    elif data[:8] == b"\x89PNG\r\n\x1a\n":
+        ext = "png"
+    elif len(data) >= 12 and data[0:4] == b"RIFF" and data[8:12] == b"WEBP":
+        ext = "webp"
+
+    if ext is None:
+        raise HTTPException(
+            status_code=415,
+            detail="Formato de avatar não suportado (use JPEG, PNG ou WebP)",
+        )
+
+    # Nome aleatório gerado no servidor: o nome original NUNCA é persistido.
+    filename = f"{uuid4().hex}.{ext}"
+    os.makedirs(app_settings.UPLOAD_DIR, exist_ok=True)
+    filepath = os.path.join(app_settings.UPLOAD_DIR, filename)
+    with open(filepath, "wb") as out:
+        out.write(data)
+
+    # Persiste somente o caminho relativo (o diretório pode virar volume Docker).
+    current_user.avatar = f"uploads/{filename}"
+    db.commit()
+    db.refresh(current_user)
+
+    # A resposta expõe a URL da API, nunca o caminho de disco.
+    return {"avatar_url": "/api/users/me/avatar_file"}
+
+
+@router.get("/users/me/avatar_file")
+def get_avatar_file(current_user: models.User = Depends(deps.get_current_user)):
+    if not current_user.avatar:
+        raise HTTPException(status_code=404, detail="User has no avatar")
+
+    # Mime derivado da extensão salva (sempre image/*, nunca executável).
+    ext = os.path.splitext(current_user.avatar)[1].lstrip(".").lower()
+    # basename protege contra path traversal mesmo se o campo for adulterado.
+    filepath = os.path.join(app_settings.UPLOAD_DIR, os.path.basename(current_user.avatar))
+    return FileResponse(
+        filepath,
+        media_type=f"image/{ext}",
+        headers={"Content-Disposition": "inline"},
+    )
+
 @router.get("/categories", response_model=list[schemas.CategoryResponse])
 def get_categories(db: Session = Depends(get_db)):
     categories = crud.get_categories(db)
@@ -103,6 +167,11 @@ def create_candidacy(candidacy: schemas.CandidacyCreate, db: Session = Depends(g
     if not settings.votacao_aberta:
         raise HTTPException(status_code=403, detail="Voting is closed")
     
+    # Limite de 4 candidaturas por eleitor — espelha a regra da cédula no frontend
+    limite = db.query(models.Candidacy).filter(models.Candidacy.user_id == current_user.id).count()
+    if limite >= 4:
+        raise HTTPException(status_code=400, detail="Limit of 4 candidacies per user")
+
     existing = db.query(models.Candidacy).filter(
         models.Candidacy.category_id == candidacy.category_id,
         models.Candidacy.user_id == current_user.id
@@ -149,6 +218,15 @@ def cast_vote(vote: schemas.VoteCreate, db: Session = Depends(get_db), current_u
         
     crud.cast_vote(db, vote, voter_id=current_user.id)
     return {"status": "success"}
+
+@router.get("/votes/me")
+def read_my_votes(db: Session = Depends(get_db), current_user: models.User = Depends(deps.get_current_user)):
+    # Cédulas do PRÓPRIO eleitor autenticado — retorna a cesta de votos dele.
+    votes = crud.get_votes_for_voter(db, current_user.id)
+    return [
+        {"category_id": v.category_id, "voted_user_id": v.voted_user_id, "voted_username": crud.get_user(db, v.voted_user_id).username}
+        for v in votes
+    ]
 
 @router.get("/results", response_model=list[schemas.CategoryResultResponse])
 def get_results(db: Session = Depends(get_db)):

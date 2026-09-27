@@ -92,12 +92,25 @@ def get_settings(db: Session):
         db.refresh(settings)
     return settings
 
+def get_votes_for_voter(db: Session, voter_id: int):
+    """Votos JÁ DADOS por um eleitor (o próprio) — sigilo preservado:
+    a rota expõe apenas as cédulas de quem está autenticado."""
+    return (
+        db.query(models.Vote)
+        .filter(models.Vote.voter_id == voter_id)
+        .order_by(models.Vote.category_id)
+        .all()
+    )
+
 def update_settings(db: Session, settings_update: schemas.SettingsUpdate):
     settings = get_settings(db)
-    if settings_update.votacao_aberta is not None:
-        settings.votacao_aberta = settings_update.votacao_aberta
-    if settings_update.reveal_at is not None:
-        settings.reveal_at = settings_update.reveal_at
+    # "exclude_unset" distingue OMISSÃO (não toca) de NULL EXPLÍCITO (limpa).
+    valores = settings_update.model_dump(exclude_unset=True)
+    if "votacao_aberta" in valores:
+        settings.votacao_aberta = valores["votacao_aberta"]
+    if "reveal_at" in valores:
+        # None explícito LIMPA o agendamento (sem valor → apaga o horário).
+        settings.reveal_at = valores["reveal_at"]
     db.commit()
     db.refresh(settings)
     return settings

@@ -9,6 +9,9 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     vulgo = Column(String, nullable=True) # nome de exibição na gala
+    # Caminho RELATIVO do avatar em disco (ex.: "uploads/ab12….png").
+    # O arquivo em si vive em UPLOAD_DIR (volume no deploy); nada de BLOB no banco.
+    avatar = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
     candidacies = relationship("Candidacy", back_populates="user")
