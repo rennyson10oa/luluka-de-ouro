@@ -330,10 +330,10 @@ perfil do Header abre um overlay em tela cheia com a **taça 3D girando**
 (modelo `trophy-3d.glb` já carregado/cacheado pelo `useGLTF`) e as opções
 na parte de cima.
 
-- [ ] **13.1** Em 360px, o ícone de perfil (avatar) do Header abre o menu em tela cheia: fundo escuro com a taça 3D girando no centro, opções de navegação no topo.
-- [ ] **13.2** Os links levam aos destinos corretos e **fecham o menu** (Início, Candidaturas, A Cerimônia, Galeria, Painel Admin).
-- [ ] **13.3** "Votação" é auth-aware e fecha o menu antes de navegar.
-- [ ] **13.4** Item de conta: logado → "Perfil de @handle"; deslogado → "Entrar na Gala".
-- [ ] **13.5** Fecha com o X, com a tecla Esc e com clique no fundo; o scroll do body fica travado enquanto aberto.
-- [ ] **13.6** O menu não existe no desktop (`md:hidden`) — o avatar desktop continua indo direto ao perfil.
-- [ ] **13.7** Sem scroll horizontal e sem travar a taça 3D (performance ok no mobile — modelo de 44KB já cacheado).
+- [x] **13.1** Em 360px, o ícone de perfil (avatar) do Header abre o menu em tela cheia: fundo escuro com a taça 3D girando no centro, opções de navegação no topo.
+- [x] **13.2** Os links levam aos destinos corretos e **fecham o menu** (Início, Candidaturas, A Cerimônia, Galeria, Painel Admin).
+- [x] **13.3** "Votação" é auth-aware e fecha o menu antes de navegar.
+- [x] **13.4** Item de conta: logado → "Perfil de @handle"; deslogado → "Entrar na Gala".
+- [x] **13.5** Fecha com o X, com a tecla Esc e com clique no fundo; o scroll do body fica travado enquanto aberto.
+- [x] **13.6** O menu não existe no desktop (`md:hidden`) — o avatar desktop continua indo direto ao perfil.
+- [x] **13.7** Sem scroll horizontal e sem travar a taça 3D (performance ok no mobile — modelo de 44KB já cacheado).

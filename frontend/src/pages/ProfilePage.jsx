@@ -51,7 +51,7 @@ export default function ProfilePage() {
         <main className="flex-grow flex items-center justify-center pt-28">
           <div className="flex flex-col items-center gap-3">
             <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
-            <span className="font-sans text-body-sm text-on-surface-variant">Verificando credenciales notariales...</span>
+            <span className="font-sans text-body-sm text-on-surface-variant">Verificando credenciais notariais...</span>
           </div>
         </main>
         <Footer />

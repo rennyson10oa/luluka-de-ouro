@@ -1,19 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HeaderAdmin } from '../../components/Header'
 import useAdminAuth from '../../hooks/useAdminAuth'
 import useAuth from '../../hooks/useAuth'
+import useGalaState from '../../hooks/useGalaState'
+import apiFetch from '../../utils/api'
 import { MOCK_STATS, MOCK_CATEGORIES, MOCK_AUDIT_LOG, TOTAL_VOTES } from '../../data/mockAdmin'
-
-const REVEAL_KEY = 'pg_reveal_at'
 
 /**
  * AdminPanel — Painel de Controle Soberano da Academia.
- * MVP funcional: agendamento do reveal persiste em localStorage (lido pelo
- * Countdown da landing) e "Zerar Tudo" limpa as chaves pg_*. Gestão de
- * categorias/indicados é mock visual até o backend entrar.
+ * Fase 2 (ADR-0002): o agendamento do reveal agora é salvo no servidor via
+ * PUT /api/admin/settings (Bearer do admin) e lido de GET /api/state. "Zerar
+ * Tudo" continua limpando apenas as chaves pg_* locais — os votos e as
+ * candidaturas REAIS permanecem no banco do servidor.
+ * Gestão de categorias/indicados segue mock visual (Fase 3).
  * Conteúdo puro: o shell (header global, footer) pertence a AdminPage.
  */
+
+/** Converte ISO em valor aceito pelo input datetime-local (hora local). */
+function toLocalInputValue(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 function StatCard({ icon, label, value, detail }) {
   return (
@@ -115,25 +125,52 @@ export default function AdminPanel() {
   const { admin, logoutAdmin } = useAdminAuth()
   const { logout } = useAuth()
   const navigate = useNavigate()
-  const [revealAt, setRevealAt] = useState(() => localStorage.getItem(REVEAL_KEY) || '')
+  // Fonte de verdade do reveal: GET /api/state (substitui pg_reveal_at).
+  const { revealAt, refresh } = useGalaState()
+  const [revealInput, setRevealInput] = useState('')
   const [toast, setToast] = useState(null)
   const [filter, setFilter] = useState('')
+
+  // Preenche o input datetime-local quando o estado real chega/atualiza.
+  useEffect(() => {
+    if (revealAt) setRevealInput(toLocalInputValue(revealAt))
+  }, [revealAt])
 
   function showToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 3200)
   }
 
-  function saveReveal(e) {
+  async function saveReveal(e) {
     e.preventDefault()
-    if (!revealAt) return
-    localStorage.setItem(REVEAL_KEY, new Date(revealAt).toISOString())
-    showToast('Agendamento notarial registrado com sucesso!')
+    if (!revealInput) return
+    const token = admin?.token
+    if (!token) {
+      showToast('Sessão admin sem token: entre novamente para agendar.')
+      return
+    }
+    const res = await apiFetch('/api/admin/settings', {
+      method: 'PUT',
+      // Omite votacao_aberta para preservar o estado configurado no servidor.
+      // FIX do fuso: enviamos o datetime-local LITERAL (fuso de parede,
+      // "2026-09-25T23:50") — NÃO converta para toISOString (UTC). Antes, o
+      // caminho local→UTC→SQLite naive→leitura como local somava +3h em cada
+      // salvamento. O backend (dateTime sem fuso) espera exatamente esta forma.
+      // Input vazio envia null explícito: o backend agora LIMPA o agendamento.
+      body: { reveal_at: revealInput || null },
+      token,
+    })
+    if (res.ok) {
+      refresh()
+      showToast('Agendamento notarial registrado com sucesso!')
+    } else {
+      showToast('Falha ao registrar no cartório — verifique a sessão soberana.')
+    }
   }
 
   function wipeAll() {
     const confirmed = window.confirm(
-      'Isso apagará TODOS os dados locais da gala (usuários, sessão admin, agendamento). Ação irreversível! Continuar?'
+      'Isso apagará os dados LOCAIS da gala (sessão e agendamento no navegador). Votos e candidaturas reais continuam no servidor. Continuar?'
     )
     if (!confirmed) return
     Object.keys(localStorage)
@@ -192,7 +229,7 @@ export default function AdminPanel() {
             </div>
           </div>
 
-          {/* Agendamento do reveal — FUNCIONAL (persiste em pg_reveal_at) */}
+          {/* Agendamento do reveal — FUNCIONAL (PUT /api/admin/settings) */}
           <form onSubmit={saveReveal} className="bg-surface-container-low/80 backdrop-blur-xl rounded-2xl p-5 shadow-lg flex flex-col gap-3 min-w-[280px]">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-primary text-[20px]">calendar_clock</span>
@@ -200,8 +237,8 @@ export default function AdminPanel() {
             </div>
             <input
               type="datetime-local"
-              value={revealAt}
-              onChange={(e) => setRevealAt(e.target.value)}
+              value={revealInput}
+              onChange={(e) => setRevealInput(e.target.value)}
               className="w-full rounded-xl bg-surface-container-lowest/90 text-on-surface px-4 py-2.5 font-sans text-body-md text-[color-scheme:dark] focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
             />
             <button
@@ -212,7 +249,8 @@ export default function AdminPanel() {
               Salvar Agendamento
             </button>
             <p className="font-sans text-[11px] text-outline leading-tight">
-              A contagem regressiva da landing lê este horário (chave <code className="text-secondary">pg_reveal_at</code>).
+              Salvo no cartório via <code className="text-secondary">PUT /api/admin/settings</code> e lido por
+              toda a gala em <code className="text-secondary">GET /api/state</code>.
             </p>
           </form>
         </section>

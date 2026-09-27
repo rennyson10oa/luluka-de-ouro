@@ -3,11 +3,11 @@ import useAuth from '../../hooks/useAuth'
 
 /**
  * AccountSettings — "Credencial do WhatsApp / Sessão Segura".
- * Tres formularios contra el backend real:
+ * Três formulários contra o backend real:
  *   1. Nome de Exibição na Gala (vulgo) → PATCH /api/users/me
  *   2. Identificador Único (@handle)    → PATCH /api/users/me (re-emite JWT)
  *   3. Modificar Chave Notarial         → PATCH /api/users/me/password
- * Los errores de la API se muestran en un banner compartido.
+ * Os erros da API aparecem num banner compartilhado.
  */
 export default function AccountSettings({ user, onToast }) {
   const { updateProfile, changePassword } = useAuth()
@@ -24,7 +24,7 @@ export default function AccountSettings({ user, onToast }) {
   const [banner, setBanner] = useState(null) // { type: 'success'|'error', msg }
   const [busy, setBusy] = useState('') // '' | 'vulgo' | 'handle' | 'senha'
 
-  // Sincroniza los campos cuando el user cambia (ej: handle re-emitido).
+  // Sincroniza os campos quando o usuário muda (ex.: handle re-emitido).
   useEffect(() => {
     setVulgo(user?.vulgo || '')
     setHandle(user?.username || '')

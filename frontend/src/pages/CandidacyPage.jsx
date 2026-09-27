@@ -22,9 +22,8 @@ function hasStoredSession() {
 
 /**
  * CandidacyPage — Urna de Candidaturas (/candidaturas).
- * Guard idêntico ao VotePage. Store compartilhado (pg_candidacies) com o perfil.
- * Tudo mock: candidaturas persistem em localStorage e as categorias vêm de
- * MOCK_CATEGORIES (fonte única, nunca mutada — ADR-0001).
+ * Guard idêntico ao VotePage. Fase 2 (ADR-0002): o dossiê vem do backend real
+ * via useCandidacies (POST/PUT em /api/candidacies) — sem localStorage.
  */
 export default function CandidacyPage() {
   const { isAuthenticated, user } = useAuth()
@@ -94,14 +93,16 @@ export default function CandidacyPage() {
     }
   }
 
-  function handleSubmit(pitch) {
+  // Os actions do hook agora são assíncronos (POST/PUT no cartório):
+  // aguardamos o resultado para o toast refletir o que o servidor aceitou.
+  async function handleSubmit(pitch) {
     if (modalEditing) {
-      const res = updatePitch(modalEditing.id, pitch)
+      const res = await updatePitch(modalEditing.id, pitch)
       if (res.success) showToast('Pitch retificado com sucesso!')
       return res
     }
     if (modalCategory) {
-      const res = addCandidacy(modalCategory, pitch)
+      const res = await addCandidacy(modalCategory, pitch)
       if (res.success) showToast('Candidatura registrada! Boa sorte na disputa')
       return res
     }

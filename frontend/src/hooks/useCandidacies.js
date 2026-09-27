@@ -1,32 +1,23 @@
 import { useCallback, useEffect, useState } from 'react'
-import { MOCK_CATEGORIES } from '../data/mockAdmin'
-import { MOCK_MY_CANDIDACIES, MAX_CANDIDACIES } from '../data/mockProfile'
+import apiFetch from '../utils/api'
+import { MAX_CANDIDACIES } from '../data/mockProfile'
 import useAuth from './useAuth'
-import { scopedKey, userScope } from '../utils/userScope'
+import useGalaState from './useGalaState'
 
 /**
- * useCandidacies — store mock compartilhado de candidaturas do usuário.
+ * useCandidacies — dossiê real de candidaturas do usuário (Fase 2, ADR-0002).
  *
- * Persistência em localStorage COM ESCOPO DO ELEITOR (pg_candidacies:u<id>),
- * compartilhada entre a Urna de Candidaturas (/candidaturas) e o Perfil
- * (MyCandidacies + contador do ProfileHeader). Sem o escopo, o usuário B
- * herdava o dossiê do usuário A (mesma classe do bug dos votos).
+ * Não existem endpoints GET próprios de "minhas candidaturas": o dossiê é
+ * derivado de GET /api/categories, filtrando as candidacies cujo user_id é o
+ * usuário logado. Escrita via POST /api/candidacies e PUT /api/candidacies/{id}.
  *
- * Estrutura do item:
+ * O protocolo (#XXX-2025-NN) NÃO existe no servidor — é gerado localmente e
+ * determinístico por candidacy.id apenas para exibição (pendência de Fase 3).
+ * O `status` também não vem da API: o dossiê real nasce como 'em_disputa'.
+ *
+ * Estrutura do item (mesmo shape consumido por CandidacyPage/MyCandidacies):
  *   { id, protocol, categoryId, categoryTitle, categoryEmoji, pitch, status, createdAt }
- *   status: 'em_disputa' | 'homologada'
- *
- * Regras de negócio:
- *   1. Máx. MAX_CANDIDACIES (4) candidaturas ativas.
- *   2. 1 candidatura por categoria (openCategories some ao registrar).
- *   3. Pitch entre 1 e 280 caracteres.
- *   4. Edição bloqueada se pg_reveal_at passou (isClosed) — chave GLOBAL.
- *
- * ADR-0001 (gotcha): o store é dono dos próprios dados — NUNCA muta
- * MOCK_CATEGORIES (fonte única compartilhada com a cédula e o admin).
  */
-
-const REVEAL_KEY = 'pg_reveal_at'
 
 /** Palavras de ligação ignoradas ao gerar as iniciais do protocolo. */
 const STOPWORDS = new Set([
@@ -34,67 +25,16 @@ const STOPWORDS = new Set([
   'e', 'para', 'por', 'em', 'no', 'na', 'um', 'uma',
 ])
 
-function readJSON(key) {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-/** true se pg_reveal_at existe e é uma data no passado (urnas fechadas). */
-function computeIsClosed() {
-  try {
-    const saved = localStorage.getItem(REVEAL_KEY)
-    if (!saved) return false
-    const d = new Date(saved)
-    return !Number.isNaN(d.getTime()) && d.getTime() < Date.now()
-  } catch {
-    return false
-  }
-}
+/** Descrição genérica: a API não expõe a descrição da categoria. */
+const CATEGORY_DESCRIPTION_FALLBACK =
+  'Categoria oficial da gala. Mostre por que você merece este troféu.'
 
 /**
- * Casa o título do mockProfile com o título canônico de MOCK_CATEGORIES
- * (case-insensitive + contains nos dois sentidos). Ex.:
- *   'Membro com Mais Mitadas' → casa direto;
- *   'Mais Pataquadas do Ano' → casa com 'Membro com Mais Pataquadas do Ano'.
+ * Gera o protocolo de DISPLAY: '#' + até 3 iniciais da categoria + '-2025-' +
+ * 2 dígitos derivados do id da candidatura (estável entre refetches).
  */
-function findCategoryByTitle(title) {
-  const needle = String(title || '').trim().toLowerCase()
-  if (!needle) return null
-  return (
-    MOCK_CATEGORIES.find((cat) => cat.title.toLowerCase().includes(needle)) ||
-    MOCK_CATEGORIES.find((cat) => needle.includes(cat.title.toLowerCase())) ||
-    null
-  )
-}
-
-/**
- * Seed inicial: primeira leitura com storage vazio → semeia a partir de
- * MOCK_MY_CANDIDACIES, usando os títulos canônicos de MOCK_CATEGORIES.
- * Status derivado do protocolo: MIT → 'em_disputa', PAT → 'homologada'.
- */
-function buildSeed() {
-  return MOCK_MY_CANDIDACIES.map((mock, index) => {
-    const category = findCategoryByTitle(mock.category)
-    return {
-      id: `seed-${index + 1}`,
-      protocol: mock.protocol,
-      categoryId: category ? category.id : null,
-      categoryTitle: category ? category.title : mock.category,
-      categoryEmoji: category ? category.emoji : mock.emoji,
-      pitch: mock.pitch,
-      status: mock.protocol.startsWith('#MIT') ? 'em_disputa' : 'homologada',
-      createdAt: '2025-09-01T02:47:00.000Z',
-    }
-  })
-}
-
-/** Gera o protocolo: '#' + 3 letras da categoria + '-2025-' + 2 dígitos. */
-function buildProtocol(categoryTitle) {
-  const initials = categoryTitle
+function buildProtocol(categoryTitle, seed) {
+  const initials = String(categoryTitle || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .split(/\s+/)
@@ -103,53 +43,105 @@ function buildProtocol(categoryTitle) {
     .join('')
     .toUpperCase()
     .slice(0, 3)
-  const digits = String(Math.floor(Math.random() * 100)).padStart(2, '0')
-  return `#${initials}-2025-${digits}`
+  const numericSeed = Number.isFinite(Number(seed)) ? Number(seed) : 0
+  const digits = String(Math.abs(numericSeed) % 100).padStart(2, '0')
+  return `#${initials || 'GAL'}-2025-${digits}`
+}
+
+/** Mapeia uma candidacy do backend para o item de exibição da urna. */
+function mapCandidacy(cand, category) {
+  return {
+    // id do servidor — usado no PUT /api/candidacies/{id}.
+    id: cand.id,
+    protocol: buildProtocol(category.title, cand.id),
+    categoryId: category.id,
+    categoryTitle: category.title,
+    categoryEmoji: category.emoji,
+    pitch: cand.pitch,
+    // Não há status no backend: dossiê real entra em disputa.
+    status: 'em_disputa',
+    // A API não expõe createdAt; CandidacyCard degrada para '--:--'.
+    createdAt: null,
+  }
+}
+
+/** Converte o `detail` EN do backend em mensagem pt-BR da urna. */
+function mapCandidacyError(status, detail) {
+  const text = String(detail || '')
+  if (status === 400 && text.includes('Limit of 4')) {
+    return 'Limite de candidaturas atingido: o dossiê está completo'
+  }
+  if (status === 400 && text.includes('Already a candidate')) {
+    return 'Você já tem candidatura registrada nesta categoria'
+  }
+  if (status === 403) {
+    return 'Votação encerrada'
+  }
+  if (status === 401) {
+    return 'Sessão expirada: entre na gala novamente'
+  }
+  return 'Falha na comunicação com o cartório'
 }
 
 export default function useCandidacies() {
   const { user } = useAuth()
+  const userId = user?.id
+  // Fechamento das urnas vem do servidor (substitui o antigo pg_reveal_at).
+  const { isClosed } = useGalaState()
 
-  // Chave com escopo do eleitor; 'anon' durante a hidratação do useAuth.
-  const storageKey = scopedKey('pg_candidacies', user)
-  const isAnon = userScope(user) === 'anon'
+  // Categorias completas da gala (para as "Vagas Abertas" e para a descrição).
+  const [allCategories, setAllCategories] = useState(null)
+  // Dossiê do usuário (array de itens de exibição).
+  const [candidacies, setCandidacies] = useState([])
 
-  /** Lê do storage ou semeia (cada eleitor ganha o próprio dossiê inicial). */
-  function loadOrSeed() {
-    const saved = readJSON(storageKey)
-    if (Array.isArray(saved)) return saved
-    const seed = buildSeed()
-    // Não persiste na chave 'anon' — é descartada quando o id chega.
-    if (!isAnon) {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(seed))
-      } catch {
-        // storage indisponível → segue só em memória
-      }
+  const load = useCallback(async () => {
+    const res = await apiFetch('/api/categories')
+    if (!res.ok || !Array.isArray(res.data)) {
+      console.error('[useCandidacies] Falha ao carregar /api/categories', res.status)
+      setAllCategories([])
+      setCandidacies([])
+      return
     }
-    return seed
-  }
 
-  // Estado inicial: lê do storage com escopo; se vazio, semeia.
-  const [candidacies, setCandidacies] = useState(loadOrSeed)
+    setAllCategories(
+      res.data.map((cat) => ({
+        id: cat.id,
+        title: cat.title,
+        emoji: cat.emoji,
+        description: CATEGORY_DESCRIPTION_FALLBACK,
+      }))
+    )
 
-  // Re-sincroniza quando a identidade muda (hidratação do useAuth preenche
-  // o id depois do 1º render; troca de usuário sem remount da página).
+    // Sem identidade hidratada ainda: dossiê vazio (evita vazar de outro usuário).
+    if (!Number.isInteger(userId)) {
+      setCandidacies([])
+      return
+    }
+
+    const mine = []
+    res.data.forEach((cat) => {
+      ;(cat.candidacies || []).forEach((cand) => {
+        if (cand.user_id === userId) mine.push(mapCandidacy(cand, cat))
+      })
+    })
+    setCandidacies(mine)
+  }, [userId])
+
+  // Carrega no mount e re-consulta sempre que a identidade mudar.
   useEffect(() => {
-    setCandidacies(loadOrSeed())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey])
+    load()
+  }, [load])
 
   const usedCount = candidacies.length
   const remaining = Math.max(0, MAX_CANDIDACIES - usedCount)
 
   // Categorias sem candidatura do usuário (por categoryId) = "Vagas abertas".
   const usedCategoryIds = new Set(candidacies.map((c) => c.categoryId))
-  const openCategories = MOCK_CATEGORIES.filter((cat) => !usedCategoryIds.has(cat.id))
+  const openCategories = (allCategories || []).filter((cat) => !usedCategoryIds.has(cat.id))
 
-  /** Registra uma nova candidatura. Valida limite, faixa do pitch e unicidade por categoria. */
+  /** Registra nova candidatura (POST). Valida o que dá para validar no cliente. */
   const addCandidacy = useCallback(
-    (category, pitch) => {
+    async (category, pitch) => {
       const trimmed = String(pitch || '').trim()
       if (remaining <= 0) {
         return { success: false, error: 'Limite de candidaturas atingido: o dossiê está completo' }
@@ -160,46 +152,52 @@ export default function useCandidacies() {
       if (candidacies.some((c) => c.categoryId === category.id)) {
         return { success: false, error: 'Você já tem candidatura registrada nesta categoria' }
       }
-      const item = {
-        id: `cand-${Date.now()}`,
-        protocol: buildProtocol(category.title),
-        categoryId: category.id,
-        categoryTitle: category.title,
-        categoryEmoji: category.emoji,
-        pitch: trimmed,
-        status: 'em_disputa',
-        createdAt: new Date().toISOString(),
+
+      const res = await apiFetch('/api/candidacies', {
+        method: 'POST',
+        body: { category_id: category.id, pitch: trimmed },
+        token: true,
+      })
+
+      if (!res.ok || !res.data) {
+        return {
+          success: false,
+          error: mapCandidacyError(res.status, res.data?.detail),
+        }
       }
-      const next = [...candidacies, item]
-      setCandidacies(next)
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(next))
-      } catch {
-        // storage indisponível → segue só em memória
-      }
+
+      // 201 → merge do item novo na lista local (sem refetch).
+      setCandidacies((prev) => [...prev, mapCandidacy(res.data, category)])
       return { success: true }
     },
-    [candidacies, remaining, storageKey]
+    [candidacies, remaining]
   )
 
-  /** Retifica o pitch de uma candidatura existente (valida 1..280). */
-  const updatePitch = useCallback(
-    (id, pitch) => {
-      const trimmed = String(pitch || '').trim()
-      if (trimmed.length < 1 || trimmed.length > 280) {
-        return { success: false, error: 'O pitch deve ter entre 1 e 280 caracteres' }
+  /** Retifica o pitch de uma candidatura existente (PUT). */
+  const updatePitch = useCallback(async (id, pitch) => {
+    const trimmed = String(pitch || '').trim()
+    if (trimmed.length < 1 || trimmed.length > 280) {
+      return { success: false, error: 'O pitch deve ter entre 1 e 280 caracteres' }
+    }
+
+    const res = await apiFetch(`/api/candidacies/${id}`, {
+      method: 'PUT',
+      body: { pitch: trimmed },
+      token: true,
+    })
+
+    if (!res.ok || !res.data) {
+      const detail = res.data?.detail
+      if (res.status === 403 && String(detail || '').includes('Not authorized')) {
+        return { success: false, error: 'Não autorizado a editar este pitch' }
       }
-      const next = candidacies.map((c) => (c.id === id ? { ...c, pitch: trimmed } : c))
-      setCandidacies(next)
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(next))
-      } catch {
-        // storage indisponível → segue só em memória
-      }
-      return { success: true }
-    },
-    [candidacies, storageKey]
-  )
+      return { success: false, error: mapCandidacyError(res.status, detail) }
+    }
+
+    // Merge do pitch retificado na lista local.
+    setCandidacies((prev) => prev.map((c) => (c.id === id ? { ...c, pitch: res.data.pitch } : c)))
+    return { success: true }
+  }, [])
 
   /** Texto pronto para compartilhar no Zap. */
   const shareText = useCallback((candidacy) => {
@@ -214,7 +212,7 @@ export default function useCandidacies() {
     openCategories,
     addCandidacy,
     updatePitch,
-    isClosed: computeIsClosed(),
+    isClosed,
     shareText,
   }
 }

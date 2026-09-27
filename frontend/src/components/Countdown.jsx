@@ -1,19 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import useGalaState from '../hooks/useGalaState'
 
-// MOCK: prioriza o agendamento definido no Painel Admin (chave pg_reveal_at,
-// persistida por AdminPanel). Sem agendamento, cai num mock de 4 dias à frente.
-// Quando a API real existir, trocar por: fetch('/api/settings') → d.reveal_at
-function getTargetDate() {
-  try {
-    const saved = localStorage.getItem('pg_reveal_at')
-    if (saved) {
-      const d = new Date(saved)
-      if (!Number.isNaN(d.getTime()) && d.getTime() > Date.now()) return d
-    }
-  } catch {
-    // storage indisponível — segue para o mock
-  }
-  return new Date(Date.now() + (4 * 24 * 3600 + 18 * 3600 + 42 * 60 + 15) * 1000)
+/**
+ * Contagem regressiva para o reveal.
+ *
+ * Fase 2 (ADR-0002): o alvo vem de GET /api/state via useGalaState
+ * (substitui o antigo localStorage 'pg_reveal_at'). Se o cartório ainda não
+ * agendou (reveal_at nulo/inválido/passado), usa o mock de 4 dias como
+ * fallback visual — apenas exibição.
+ */
+const MOCK_REVEAL_OFFSET_MS = (4 * 24 * 3600 + 18 * 3600 + 42 * 60 + 15) * 1000
+
+/** Alvo exibido: reveal_at real (se futuro) ou mock +4d. */
+function resolveTarget(revealAt, mockFallback) {
+  if (revealAt && revealAt.getTime() > Date.now()) return revealAt
+  return mockFallback
 }
 
 function CountdownUnit({ value, label }) {
@@ -39,7 +40,10 @@ function CountdownUnit({ value, label }) {
 
 export default function Countdown() {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
-  const [targetDate] = useState(getTargetDate)
+  const { revealAt } = useGalaState()
+  // Fallback estável (não recalcula a cada render).
+  const [mockFallback] = useState(() => new Date(Date.now() + MOCK_REVEAL_OFFSET_MS))
+  const targetDate = useMemo(() => resolveTarget(revealAt, mockFallback), [revealAt, mockFallback])
 
   useEffect(() => {
     function tick() {
@@ -78,7 +82,7 @@ export default function Countdown() {
       {/* Sync status label */}
       <div className="mt-6 flex items-center gap-2 text-center text-on-surface-variant font-sans text-body-sm">
         <span className="material-symbols-outlined text-[16px] text-secondary">timer</span>
-        <span>Horário mock — urnas fecham automaticamente no grande dia às 21:00h</span>
+        <span>Sincronizado com o cartório — as urnas fecham automaticamente no horário oficial</span>
       </div>
     </section>
   )

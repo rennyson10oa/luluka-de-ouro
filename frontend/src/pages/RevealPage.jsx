@@ -5,21 +5,8 @@ import { Footer } from '../components/Footer'
 import RevealCard from '../components/reveal/RevealCard'
 import RevealChat from '../components/reveal/RevealChat'
 import ConfettiCanvas from '../components/reveal/ConfettiCanvas'
-import { RESULT_CATEGORIES, RESULTS_META } from '../data/mockResults'
-
-const REVEAL_KEY = 'pg_reveal_at'
-
-/** true se o reveal está agendado para o FUTURO (cerimônia trancada). */
-function computeIsLocked() {
-  try {
-    const saved = localStorage.getItem(REVEAL_KEY)
-    if (!saved) return false
-    const d = new Date(saved)
-    return !Number.isNaN(d.getTime()) && d.getTime() > Date.now()
-  } catch {
-    return false
-  }
-}
+import useGalaState from '../hooks/useGalaState'
+import { RESULT_CATEGORIES } from '../data/mockResults'
 
 /** Formato "04d 18h 41m 20s" para a contagem da cerimônia. */
 function formatCountdown(diff) {
@@ -32,9 +19,14 @@ function formatCountdown(diff) {
 }
 
 export default function RevealPage() {
-  const [isLocked, setIsLocked] = useState(() => computeIsLocked())
-  const [rehearsal, setRehearsal] = useState(false) // modo ensaio: destrava sem tocar storage
-  const [countdown, setCountdown] = useState('')
+  // Fonte de verdade do relógio: GET /api/state (substitui pg_reveal_at).
+  const { revealAt } = useGalaState()
+  const [rehearsal, setRehearsal] = useState(false) // modo ensaio: destrava sem tocar no backend
+  const [now, setNow] = useState(() => Date.now())
+
+  // A cerimônia fica trancada enquanto o reveal agendado está no futuro.
+  const isLocked = Boolean(revealAt && revealAt.getTime() > now)
+  const countdown = formatCountdown(Math.max(0, (revealAt?.getTime() ?? now) - now))
 
   // Máquina de estágios da cerimônia
   const [catIndex, setCatIndex] = useState(0)
@@ -53,26 +45,14 @@ export default function RevealPage() {
   // permanece true e travaria autoplay/teclado.
   const isOpen = !isLocked || rehearsal
 
-  // Contagem regressiva no estado trancado
+  // Contagem regressiva: tica por segundo enquanto há reveal agendado.
+  // Ao zerar, `isLocked` vira false sozinho — sem exigir reload
+  // (reportado no ensaio da Task 11: a cerimônia ficava trancada em 00:00).
   useEffect(() => {
-    if (!isLocked || rehearsal) return undefined
-    let target
-    try {
-      target = new Date(localStorage.getItem(REVEAL_KEY))
-    } catch {
-      target = new Date()
-    }
-    function tick() {
-      const diff = Math.max(0, target - Date.now())
-      setCountdown(formatCountdown(diff))
-      // Destrava sozinho quando o relógio zera — sem exigir reload
-      // (reportado no ensaio da Task 11: a cerimônia ficava trancada em 00:00).
-      if (target <= Date.now()) setIsLocked(false)
-    }
-    tick()
-    const id = setInterval(tick, 1000)
+    if (!revealAt) return undefined
+    const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [isLocked, rehearsal])
+  }, [revealAt])
 
   // Confete no momento do reveal
   function revealCurrent() {

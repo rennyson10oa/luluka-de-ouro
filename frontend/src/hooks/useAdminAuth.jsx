@@ -1,25 +1,22 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import apiFetch from '../utils/api'
 
 /**
- * useAdminAuth / AdminAuthProvider — MOCK de autenticação administrativa.
+ * useAdminAuth / AdminAuthProvider — autenticação administrativa REAL (Fase 2).
+ *
+ * Fase 2 (ADR-0002): o comparador de senha via VITE_ADMIN_PASSWORD foi trocado
+ * por POST /api/admin/login. O access_token do admin é guardado junto do objeto
+ * de sessão (na mesma chave 'pg_admin' já usada) e reaproveitado no
+ * PUT /api/admin/settings (Authorization: Bearer do admin).
  *
  * ARQUITETURA (mesmo padrão do AuthProvider em useAuth.jsx): o estado vive em
- * UM AdminAuthProvider no topo da árvore (App.jsx). Antes do provider,
- * AdminPage/AdminGate/AdminPanel criavam instâncias independentes — o logout
- * do painel não refletia na página e o gate só aparecia após reload.
- *
- * Estratégia (ver docs/arquitetura/adrs/adr-0001 e docs/backend/05-backend.md):
- * senha única via VITE_ADMIN_PASSWORD com fallback hardcoded. Qualquer gate
- * client-side é visível no bundle — aqui o valor é o ritual e a DX de rotação,
- * não criptografia. Na Fase 2 este hook vira chamada a /api/admin/login e a
- * flag vira role no JWT.
+ * UM AdminAuthProvider no topo da árvore (App.jsx) — AdminPage/AdminGate/
+ * AdminPanel compartilham a mesma sessão.
  *
  * Sessão em sessionStorage: fechar a aba encerra o acesso admin (higiene).
  */
 
 const ADMIN_KEY = 'pg_admin'
-
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'luluka2025'
 
 const AdminAuthContext = createContext(null)
 
@@ -30,10 +27,6 @@ function readAdmin() {
   } catch {
     return null
   }
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -49,11 +42,25 @@ export function AdminAuthProvider({ children }) {
   }, [])
 
   const loginAdmin = useCallback(async (password) => {
-    await delay(500)
-    if (password !== ADMIN_PASSWORD) {
-      return { success: false, error: 'Senha soberana incorreta' }
+    const res = await apiFetch('/api/admin/login', {
+      method: 'POST',
+      body: { password },
+    })
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        return { success: false, error: 'Senha inválida' }
+      }
+      return { success: false, error: 'Cartório indisponível: o servidor da gala não respondeu' }
     }
-    const next = { username: '@AdminMor', role: 'Superuser • Juiz de Paz' }
+
+    const token = res.data?.access_token
+    if (!token) {
+      return { success: false, error: 'Cartório indisponível: o servidor da gala não respondeu' }
+    }
+
+    // O objeto guardado ganha o Bearer do admin (usado no PUT de settings).
+    const next = { username: '@AdminMor', role: 'Superuser • Juiz de Paz', token }
     sessionStorage.setItem(ADMIN_KEY, JSON.stringify(next))
     setAdmin(next)
     return { success: true }

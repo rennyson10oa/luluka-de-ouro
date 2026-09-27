@@ -1,96 +1,130 @@
 import { useCallback, useEffect, useState } from 'react'
-import { MOCK_CATEGORIES } from '../data/mockAdmin'
+import apiFetch from '../utils/api'
 import useAuth from './useAuth'
-import { scopedKey } from '../utils/userScope'
+import useGalaState from './useGalaState'
 
 /**
- * useBallot — lógica completa da cédula de votação (mock, sem backend).
+ * useBallot — lógica da cédula de votação contra o backend REAL (Fase 2).
  *
- * Estado local de seleção + persistência em localStorage COM ESCOPO DO
- * ELEITOR (pg_votes:u<id>) — votos são do eleitor, não da gala. Sem o
- * escopo, o usuário B herdava a cédula selada do usuário A (bug corrigido
- * na verificação da Task 6).
+ * Diferente do mock anterior, NÃO existe storage de votos: o voto vive só no
+ * servidor (POST /api/votes). Consequência assumida por design (ADR-0002):
+ * após um reload da página a cédula volta "limpa", porque não há GET de votos
+ * por eleitor — o backend preserva o sigilo notarial. O usuário pode votar de
+ * novo (o POST faz upsert); a tela de selo é um estado de sessão.
  *
- *   - pg_votes:u<id>      → { [categoryId]: nomineeId } (votos selados)
- *   - pg_votes_meta:u<id> → { hash, at } (metadados do selo)
- *   - pg_reveal_at        → data ISO de fechamento (GLOBAL — config da gala)
+ * Fluxo:
+ *   1. GET /api/categories (sem auth) → mapeia para o shape já consumido
+ *      pelas telas: { id, title, emoji, modo, description, nominees }.
+ *   2. Seleção local (voto em branco = categoria sem seleção / null).
+ *   3. sealVotes() → POST /api/votes para CADA seleção não-nula com Bearer.
+ *      Se todos os POSTs voltarem ok: marca hasSealed, gera o hash fake
+ *      #GALA-2025-XXXXXX (permanece cosmético por design) e registra o horário.
  *
- * Regras de negócio cobertas:
- *   1. 1 voto por categoria (selection map garante unicidade).
- *   2. Auto-voto bloqueado via isSelfVote → card disabled.
+ * Regras cobertas:
+ *   1. 1 voto por categoria (o POST faz upsert server-side).
+ *   2. Auto-voto bloqueado no cliente (isSelfVote) — o backend também devolve
+ *      403 "Self-voting is not allowed" como defesa em profundidade.
  *   3. Voto em branco permitido (categoria sem seleção = null).
- *   4. Mudança de voto permitida ANTES de selar; após selar, bloqueada (hasSealed).
- *   5. Persistência por usuário em pg_votes:u<id> + pg_votes_meta:u<id>.
- *   6. Urnas fechadas se pg_reveal_at < now.
- *
- * ADR-0001 (gotcha): a seleção é estado local do hook — nunca se muta
- * MOCK_CATEGORIES (single source of truth compartilhada com o painel admin).
+ *   4. Urnas fechadas quando reveal_at passou (via useGalaState).
  */
 
-const REVEAL_KEY = 'pg_reveal_at'
-
-function readJSON(key) {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-/** Normaliza un handle/username: quita '@', minúsculas y trim. */
+/** Normaliza um handle/username: remove '@', caixa baixa e espaços. */
 export function normalize(value) {
   return String(value || '').trim().toLowerCase().replace(/^@/, '')
 }
 
-/** Hash fake notarial: #GALA-2025-XXXXXX (6 hex aleatorios). */
+/** Hash fake notarial: #GALA-2025-XXXXXX (6 hex aleatórios) — cosmético. */
 function generateHash() {
   const hex = Array.from({ length: 6 }, () => '0123456789ABCDEF'[Math.floor(Math.random() * 16)]).join('')
   return `#GALA-2025-${hex}`
 }
 
-/** true si pg_reveal_at existe y es una fecha en el pasado (urnas cerradas). */
-function computeIsClosed() {
-  try {
-    const saved = localStorage.getItem(REVEAL_KEY)
-    if (!saved) return false
-    const d = new Date(saved)
-    return !Number.isNaN(d.getTime()) && d.getTime() < Date.now()
-  } catch {
-    return false
+/**
+ * O endpoint /api/categories não expõe descrição da categoria (só title/emoji/
+ * modo). Mantemos uma descrição genérica para o CategorySection não renderizar
+ * vazio — pendência de conteúdo para a Fase 3.
+ */
+const CATEGORY_DESCRIPTION_FALLBACK =
+  'Disputa oficial da gala. Eleja o indicado mais merecedor desta categoria.'
+
+/** Mapeia a categoria do backend para o shape que as telas da cédula já usam. */
+function mapCategory(cat) {
+  const candidacies = Array.isArray(cat.candidacies) ? cat.candidacies : []
+  return {
+    id: cat.id,
+    title: cat.title,
+    emoji: cat.emoji,
+    modo: cat.modo,
+    reveal_order: cat.reveal_order,
+    description: CATEGORY_DESCRIPTION_FALLBACK,
+    nominees: candidacies.map((cand) => ({
+      // O id do nominee É o user_id: é ele que o POST /api/votes espera.
+      id: cand.user_id,
+      handle: `@${cand.username}`,
+      name: cand.username,
+      pitch: cand.pitch || 'Sem pitch registrado.',
+      candidacyId: cand.id,
+    })),
   }
 }
 
 export default function useBallot() {
   const { user } = useAuth()
   const username = user?.username || ''
+  // Fechamento das urnas vem do servidor (substitui o antigo pg_reveal_at).
+  const { isClosed } = useGalaState()
 
-  // Chaves com escopo do eleitor. Durante a hidratação do useAuth (sem id
-  // ainda) o escopo é 'anon' — chave vazia por definição, sem flash de
-  // estado alheio. O useEffect abaixo re-sincroniza quando o id chega.
-  const votesKey = scopedKey('pg_votes', user)
-  const metaKey = scopedKey('pg_votes_meta', user)
-
-  // Seleção local (voto em branco = categoria sem seleção / null).
+  // null enquanto carrega — os consumidores mostram o estado de carregamento.
+  const [categories, setCategories] = useState(null)
   const [selection, setSelection] = useState({})
+  const [sealedVotes, setSealedVotes] = useState({})
+  const [sealedMeta, setSealedMeta] = useState({ hash: null, at: null })
 
-  // Votos já selados (lidos do storage com escopo ao montar).
-  const [sealedVotes, setSealedVotes] = useState(() => readJSON(votesKey) || {})
-  const [sealedMeta, setSealedMeta] = useState(() => readJSON(metaKey) || { hash: null, at: null })
-
-  // Re-sincroniza o selo quando a identidade muda (hidratação do useAuth
-  // preenche o id depois do 1º render; troca de usuário sem remount).
+  // Hidratação do selo: GET /api/votes/me devolve as cédulas JÀ registradas
+  // pelo eleitor autenticado. Com isso, o estado de "selado" sobrevive a
+  // reload e navegação (antes era memória de sessão do hook).
+  // hash fica null na hidratação — o hash é cosmético e nasce a cada selada.
   useEffect(() => {
-    setSealedVotes(readJSON(votesKey) || {})
-    setSealedMeta(readJSON(metaKey) || { hash: null, at: null })
-  }, [votesKey, metaKey])
+    let cancelled = false
+    ;(async () => {
+      const res = await apiFetch('/api/votes/me', { token: true })
+      if (cancelled || !res.ok || !Array.isArray(res.data)) return
+      if (res.data.length > 0) {
+        const hyd = {}
+        res.data.forEach((v) => {
+          hyd[v.category_id] = v.voted_user_id
+        })
+        setSealedVotes(hyd)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
-  // true se pg_votes:u<id> existe e não está vazio.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const res = await apiFetch('/api/categories')
+      if (cancelled) return
+      if (!res.ok || !Array.isArray(res.data)) {
+        console.error('[useBallot] Falha ao carregar /api/categories', res.status)
+        setCategories([])
+        return
+      }
+      setCategories(res.data.map(mapCategory))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // hasSealed = houve pelo menos uma categoria selada NESTA sessão.
   const hasSealed = Object.keys(sealedVotes).length > 0
 
   /**
-   * Seleciona/desseleciona um indicado em uma categoria.
-   * Clicar no já selecionado → desseleciona (permite mudar antes de selar).
+   * Seleciona/desseleciona um indicado. Clicar no já selecionado desseleciona
+   * (permite mudar de ideia antes de selar).
    */
   const toggleSelection = useCallback((categoryId, nomineeId) => {
     setSelection((prev) => {
@@ -104,34 +138,73 @@ export default function useBallot() {
     })
   }, [])
 
-  /** true se o indicado é o próprio usuário (auto-voto bloqueado). */
-  const isSelfVote = useCallback((nominee) => {
-    return normalize(username) === normalize(nominee.handle)
-  }, [username])
+  /** true se o indicado é o próprio usuário (auto-voto bloqueado na UI). */
+  const isSelfVote = useCallback(
+    (nominee) => {
+      return normalize(username) === normalize(nominee.handle)
+    },
+    [username]
+  )
 
   const progress = {
     selected: Object.values(selection).filter(Boolean).length,
-    total: MOCK_CATEGORIES.length,
+    total: categories?.length ?? 0,
   }
 
-  /** Sela os votos: gera hash fake, persiste pg_votes:u<id> + pg_votes_meta:u<id>. */
-  const sealVotes = useCallback(() => {
+  /**
+   * Sela os votos: POST /api/votes para cada seleção não-nula.
+   * Retorna { success, hash } ou { success:false, error } — nunca lança.
+   */
+  const sealVotes = useCallback(async () => {
+    const entries = Object.entries(selection).filter(([, votedUserId]) => votedUserId != null)
+    if (entries.length === 0) {
+      return { success: false, error: 'Selecione ao menos um indicado antes de selar' }
+    }
+
+    // Mapa real { [category_id]: voted_user_id } reconstruído a partir do que
+    // foi aceito pelo servidor — é o que a tela de selo usa para listar.
+    const posted = {}
+
+    for (const [categoryId, votedUserId] of entries) {
+      const res = await apiFetch('/api/votes', {
+        method: 'POST',
+        body: { category_id: Number(categoryId), voted_user_id: Number(votedUserId) },
+        token: true,
+      })
+
+      if (!res.ok) {
+        const detail = typeof res.data?.detail === 'string' ? res.data.detail : ''
+        if (res.status === 403 && detail.includes('Self-voting')) {
+          return { success: false, error: 'Auto-voto bloqueado: o cartório não aceita votar em você mesmo' }
+        }
+        if (res.status === 403) {
+          return { success: false, error: 'Votação encerrada: as urnas já foram seladas' }
+        }
+        if (res.status === 401) {
+          return { success: false, error: 'Sessão expirada: entre na gala novamente' }
+        }
+        return { success: false, error: 'Falha na comunicação com o cartório' }
+      }
+
+      posted[Number(categoryId)] = Number(votedUserId)
+    }
+
     const hash = generateHash()
     const at = new Date().toISOString()
-    localStorage.setItem(votesKey, JSON.stringify(selection))
-    localStorage.setItem(metaKey, JSON.stringify({ hash, at }))
-    setSealedVotes(selection)
+    // Mantém o shape consumido pela tela de selo (sealedVotes[cat.id] → user_id),
+    // reconstruído a partir dos POSTs aceitos pelo servidor.
+    setSealedVotes(posted)
     setSealedMeta({ hash, at })
     return { success: true, hash }
-  }, [selection, votesKey, metaKey])
+  }, [selection])
 
-  /** Limpa apenas a seleção local (não toca os votos selados). */
+  /** Limpa apenas a seleção local (não toca os votos já selados). */
   const resetSelection = useCallback(() => {
     setSelection({})
   }, [])
 
   return {
-    categories: MOCK_CATEGORIES,
+    categories,
     selection,
     hasSealed,
     sealedVotes,
@@ -141,6 +214,6 @@ export default function useBallot() {
     progress,
     sealVotes,
     resetSelection,
-    isClosed: computeIsClosed(),
+    isClosed,
   }
 }

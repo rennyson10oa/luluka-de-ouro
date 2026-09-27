@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import useAuth from '../hooks/useAuth'
 import useBallot from '../hooks/useBallot'
+import useGalaState from '../hooks/useGalaState'
 import Header from '../components/Header'
 import { Footer } from '../components/Footer'
 import CategorySection from '../components/ballot/CategorySection'
@@ -24,19 +25,12 @@ function hasStoredSession() {
   }
 }
 
-/** Alvo do fechamento das urnas: pg_reveal_at (se futuro) ou mock +4d. */
-function getRevealTarget() {
-  try {
-    const saved = localStorage.getItem('pg_reveal_at')
-    if (saved) {
-      const d = new Date(saved)
-      if (!Number.isNaN(d.getTime()) && d.getTime() > Date.now()) return d
-    }
-  } catch {
-    // storage indisponible → mock
-  }
-  return new Date(Date.now() + (4 * 24 * 3600 + 18 * 3600 + 42 * 60 + 15) * 1000)
-}
+/**
+ * Fallback visual do alvo das urnas: +4d. Usado SÓ quando o cartório ainda não
+ * agendou o reveal (reveal_at nulo/inválido/passado) — a fonte real é
+ * GET /api/state via useGalaState (substitui o antigo pg_reveal_at).
+ */
+const MOCK_REVEAL_OFFSET_MS = (4 * 24 * 3600 + 18 * 3600 + 42 * 60 + 15) * 1000
 
 /** Formato "04d 18h 41m 20s". */
 function formatCountdown(diff) {
@@ -61,9 +55,14 @@ export default function VotePage() {
 
   const [modalOpen, setModalOpen] = useState(false)
   const [countdown, setCountdown] = useState('')
-  const [revealTarget] = useState(getRevealTarget)
+  const [sealError, setSealError] = useState('')
 
-  // Mini-countdown inline (1s) para el cierre de urnas.
+  // Alvo do fechamento: reveal_at real (futuro) ou mock +4d como fallback.
+  const { revealAt } = useGalaState()
+  const [mockRevealTarget] = useState(() => new Date(Date.now() + MOCK_REVEAL_OFFSET_MS))
+  const revealTarget = revealAt && revealAt.getTime() > Date.now() ? revealAt : mockRevealTarget
+
+  // Mini-countdown inline (1s) para o cierre de urnas.
   useEffect(() => {
     function tick() {
       setCountdown(formatCountdown(Math.max(0, revealTarget - Date.now())))
@@ -85,7 +84,7 @@ export default function VotePage() {
         <main className="flex-grow flex items-center justify-center pt-28">
           <div className="flex flex-col items-center gap-3">
             <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
-            <span className="font-sans text-body-sm text-on-surface-variant">Verificando credenciales notariales...</span>
+            <span className="font-sans text-body-sm text-on-surface-variant">Verificando credenciais notariais...</span>
           </div>
         </main>
         <Footer />
@@ -108,6 +107,22 @@ export default function VotePage() {
   } = ballot
 
   const pct = progress.total > 0 ? Math.round((progress.selected / progress.total) * 100) : 0
+
+  // ---- Estado: cédula carregando (categories === null) ----
+  if (!categories) {
+    return (
+      <div className="min-h-screen flex flex-col bg-surface text-on-surface">
+        <Header />
+        <main className="flex-grow flex items-center justify-center pt-28">
+          <div className="flex flex-col items-center gap-3">
+            <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
+            <span className="font-sans text-body-sm text-on-surface-variant">Abrindo a cédula oficial no cartório...</span>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
 
   // ---- Estado: urnas fechadas ----
   if (isClosed) {
@@ -253,7 +268,7 @@ export default function VotePage() {
                 </p>
               </div>
 
-              {/* Sello oficial visual */}
+              {/* Selo oficial visual */}
               <div className="hidden lg:flex flex-col items-center justify-center p-4 rounded-xl bg-surface-container-lowest/80 text-center shadow-md min-w-[170px]">
                 <div className="w-14 h-14 rounded-full bg-surface-container-high flex items-center justify-center mb-2 shadow-[0_0_18px_rgba(212,175,55,0.25)]">
                   <span className="material-symbols-outlined text-primary text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>how_to_vote</span>
@@ -324,7 +339,7 @@ export default function VotePage() {
                     <span className="font-sans font-bold text-label-sm text-secondary uppercase tracking-widest">Cédula em Aberto</span>
                     <div className="flex items-center gap-2">
                       <span className="font-sans font-bold text-title-md text-on-surface">{progress.selected} / {progress.total}</span>
-                      <span className="font-sans text-body-sm text-outline">categorias seleccionadas</span>
+                      <span className="font-sans text-body-sm text-outline">categorias selecionadas</span>
                     </div>
                   </div>
                 </div>
@@ -355,6 +370,12 @@ export default function VotePage() {
 
                 {/* Ações */}
                 <div className="flex flex-col gap-3">
+                  {sealError && (
+                    <div className="flex items-start gap-2 bg-error-container/20 px-3 py-2 rounded-lg">
+                      <span className="material-symbols-outlined text-error text-[18px] shrink-0">warning</span>
+                      <span className="font-sans text-body-sm text-error">{sealError}</span>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={resetSelection}
@@ -399,9 +420,15 @@ export default function VotePage() {
         categories={categories}
         selection={selection}
         onCancel={() => setModalOpen(false)}
-        onConfirm={() => {
-          sealVotes()
+        onConfirm={async () => {
+          // Sela direto no servidor: se qualquer POST falhar, mantém a cédula
+          // aberta e exibe o motivo (auto-voto, urna fechada, rede).
+          setSealError('')
+          const res = await sealVotes()
           setModalOpen(false)
+          if (!res?.success) {
+            setSealError(res?.error || 'Falha na comunicação com o cartório')
+          }
         }}
       />
     </div>

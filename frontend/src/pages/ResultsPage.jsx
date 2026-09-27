@@ -1,42 +1,89 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import { Footer } from '../components/Footer'
 import PodiumBlock from '../components/results/PodiumBlock'
-import {
-  RESULTS_META,
-  GALLERY_STATS,
-  RESULT_CATEGORIES,
-  FUN_STATS,
-} from '../data/mockResults'
-
-// Chave de agendamento do reveal, escrita pelo painel admin (AdminPanel).
-const REVEAL_KEY = 'pg_reveal_at'
+import useGalaState from '../hooks/useGalaState'
+import apiFetch from '../utils/api'
+import { RESULTS_META, GALLERY_STATS, FUN_STATS } from '../data/mockResults'
 
 /**
- * computeIsLocked — mesma semântica da helper computeIsClosed dos hooks
- * existentes (copiada, não importada), mas invertida para a galeria:
- * pg_reveal_at definido E ainda no futuro → cerimônia pendente → galeria
- * trancada. Ausente, inválida ou passada → galeria aberta.
+ * Emoji de exibição por palavra-chave do título. A API /api/results não expõe
+ * emoji; usamos um fallback cosmético (Fase 3 pode trazer o emoji no payload).
  */
-function computeIsLocked() {
-  try {
-    const saved = localStorage.getItem(REVEAL_KEY)
-    if (!saved) return false
-    const d = new Date(saved)
-    return !Number.isNaN(d.getTime()) && d.getTime() > Date.now()
-  } catch {
-    return false
-  }
+function emojiForTitle(title) {
+  const t = String(title || '').toLowerCase()
+  if (t.includes('participa')) return '🎭'
+  if (t.includes('pataquada')) return '🤡'
+  if (t.includes('mitada')) return '👑'
+  if (t.includes('qi') || t.includes('temperatura')) return '🌡️'
+  return '🏆'
 }
 
-// Nomes curtos das pills de filtro (enxutos no mobile), coerentes com o Stitch:
-// Participação Especial, Pataquadas, Mitadas, QI Ambiente.
-const FILTER_SHORT_NAMES = {
-  'participacao-especial': 'Participação Especial',
-  'pataquadas': 'Pataquadas',
-  'mitadas': 'Mitadas',
-  'qi-ambiente': 'QI Ambiente',
+/** Entrada neutra para pódios incompletos (0, 1 ou 2 concorrentes). */
+const EMPTY_PODIUM_ENTRY = {
+  memeName: '—',
+  realName: '',
+  icon: 'workspace_premium',
+  pct: '0%',
+  votes: '0 Votos',
+  detail: '',
+  crimeLabel: 'Pitch de Campanha:',
+  crimeDetail: 'Sem pitch registrado.',
+  badge: 'Aguardando votos',
+}
+
+/**
+ * mapResultToCategory — converte GET /api/results
+ * ({ category_id, title, podium:[{user_id, username, votes, pitch}] }) no shape
+ * que o PodiumBlock consome ({ id, emoji, badge, title, validVotes, podium:{first,
+ * second, third, honorable} }). Percentuais são calculados sobre a soma local.
+ */
+function mapResultToCategory(result) {
+  const podium = Array.isArray(result.podium) ? result.podium : []
+  const total = podium.reduce((sum, item) => sum + (Number(item.votes) || 0), 0)
+  const pct = (votes) => (total > 0 ? `${(((Number(votes) || 0) / total) * 100).toFixed(1)}%` : '0%')
+
+  const toEntry = (item, isFirst) => {
+    if (!item) return { ...EMPTY_PODIUM_ENTRY }
+    const votes = Number(item.votes) || 0
+    const pitch = item.pitch || ''
+    return {
+      memeName: item.username || 'Indicado',
+      realName: '',
+      icon: 'workspace_premium',
+      pct: pct(votes),
+      votes: `${votes.toLocaleString('pt-BR')} ${votes === 1 ? 'Voto' : 'Votos'}`,
+      detail: pitch,
+      crimeLabel: 'Pitch de Campanha:',
+      crimeDetail: pitch || 'Sem pitch registrado.',
+      badge: isFirst ? 'Consagrado em Ata' : '',
+    }
+  }
+
+  const fourth = podium[3]
+
+  return {
+    id: `categoria-${result.category_id}`,
+    emoji: emojiForTitle(result.title),
+    badge: 'Ata Homologada',
+    title: result.title,
+    validVotes: `${total.toLocaleString('pt-BR')} ${total === 1 ? 'Voto Válido' : 'Votos Válidos'}`,
+    quote: '',
+    navLabel: result.title,
+    podium: {
+      first: toEntry(podium[0], true),
+      second: toEntry(podium[1], false),
+      third: toEntry(podium[2], false),
+      honorable: fourth
+        ? {
+            memeName: fourth.username || 'Indicado',
+            votes: `${Number(fourth.votes) || 0} ${Number(fourth.votes) === 1 ? 'voto' : 'votos'}`,
+            detail: fourth.pitch || '',
+          }
+        : null,
+    },
+  }
 }
 
 /**
@@ -122,7 +169,7 @@ function FunStatCard({ icon, label, value, detail }) {
  * CategoryFilter — pills horizontais de filtro por categoria.
  * Mobile: rolagem horizontal (overflow-x-auto, sem wrap). Desktop: wrap.
  */
-function CategoryFilter({ active, onChange }) {
+function CategoryFilter({ categories, active, onChange }) {
   function pillClasses(isActive) {
     const base = 'inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-sans font-semibold text-title-md transition-all shrink-0 whitespace-nowrap'
     if (isActive) {
@@ -139,7 +186,7 @@ function CategoryFilter({ active, onChange }) {
       <button type="button" onClick={() => onChange('all')} className={pillClasses(active === 'all')}>
         Todas as Categorias
       </button>
-      {RESULT_CATEGORIES.map((cat) => (
+      {categories.map((cat) => (
         <button
           key={cat.id}
           type="button"
@@ -147,7 +194,7 @@ function CategoryFilter({ active, onChange }) {
           className={pillClasses(active === cat.id)}
         >
           <span aria-hidden="true">{cat.emoji}</span>
-          {FILTER_SHORT_NAMES[cat.id] || cat.title}
+          {cat.title}
         </button>
       ))}
     </nav>
@@ -214,23 +261,57 @@ function FinalCta({ onReplay }) {
 
 /**
  * ResultsPage — Galeria de Resultados Oficiais (/resultados).
- * Pública (sem guard de login). Trancada apenas se pg_reveal_at está no
- * futuro (cerimônia pendente); ausente ou passada → galeria aberta.
+ * Pública (sem guard de login). Fase 2 (ADR-0002): o bloqueio e os pódios vêm
+ * do servidor — trancada quando a votação está aberta e o reveal ainda não
+ * passou (espelha o 403 do GET /api/results); destrancada, busca /api/results.
  */
 export default function ResultsPage() {
-  const [isLocked, setIsLocked] = useState(() => computeIsLocked())
+  // Estado global da gala (fonte de verdade do bloqueio e do reveal).
+  const { votacaoAberta, revealAt, loading: loadingGala } = useGalaState()
+  const [now, setNow] = useState(() => Date.now())
   const [toast, setToast] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
+  const [results, setResults] = useState(null)
+  const [loadError, setLoadError] = useState('')
+
+  // Trancada quando a votação está aberta E (sem reveal agendado OU reveal no
+  // futuro) — espelha exatamente a regra de 403 do GET /api/results.
+  const isLocked = !loadingGala && votacaoAberta && (!revealAt || revealAt.getTime() > now)
 
   // Destrava sozinho quando o relógio do reveal passa — sem exigir reload
   // (mesmo comportamento do RevealPage; reportado no ensaio da Task 11).
   useEffect(() => {
-    if (!isLocked) return undefined
-    const id = setInterval(() => {
-      if (!computeIsLocked()) setIsLocked(false)
-    }, 1000)
+    if (loadingGala || !isLocked) return undefined
+    const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [isLocked])
+  }, [isLocked, loadingGala])
+
+  // Busca os resultados reais quando a galeria está destrancada.
+  useEffect(() => {
+    if (loadingGala || isLocked) return undefined
+    let cancelled = false
+    ;(async () => {
+      const res = await apiFetch('/api/results')
+      if (cancelled) return
+      if (res.ok && Array.isArray(res.data)) {
+        setResults(res.data)
+        setLoadError('')
+      } else if (res.status === 403) {
+        setLoadError('Resultados sob sigilo notarial até a cerimônia.')
+      } else {
+        setLoadError('Falha na comunicação com o cartório. Tente recarregar a página.')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isLocked, loadingGala])
+
+  // Categorias a exibir (shape do PodiumBlock) derivadas da API.
+  const resultCategories = useMemo(
+    () => (results ? results.map(mapResultToCategory) : []),
+    [results]
+  )
 
   function showToast(msg) {
     setToast(msg)
@@ -264,16 +345,33 @@ export default function ResultsPage() {
   // Categorias visíveis conforme o filtro ativo.
   const filteredCategories =
     activeFilter === 'all'
-      ? RESULT_CATEGORIES
-      : RESULT_CATEGORIES.filter((cat) => cat.id === activeFilter)
+      ? resultCategories
+      : resultCategories.filter((cat) => cat.id === activeFilter)
 
   // O número da categoria vem da posição original no dataset
-  // (assim, filtrar "Mitadas" continua mostrando "Categoria 03").
+  // (assim, filtrar uma categoria continua mostrando "Categoria 0N").
   function categoryNumber(cat) {
-    return RESULT_CATEGORIES.findIndex((c) => c.id === cat.id) + 1
+    return resultCategories.findIndex((c) => c.id === cat.id) + 1
   }
 
-  // ---- Estado TRANCADO: cerimônia pendente (pg_reveal_at no futuro) ----
+  // ---- Estado: estado global da gala ainda carregando ----
+  // Evita o flash de "trancado" antes do /api/state responder.
+  if (loadingGala) {
+    return (
+      <div className="min-h-screen flex flex-col bg-surface text-on-surface">
+        <Header />
+        <main className="flex-grow flex items-center justify-center pt-28">
+          <div className="flex flex-col items-center gap-3">
+            <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
+            <span className="font-sans text-body-sm text-on-surface-variant">Consultando o cartório...</span>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
+  // ---- Estado TRANCADO: cerimônia pendente (votação aberta sem reveal passado) ----
   if (isLocked) {
     return (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
@@ -334,12 +432,28 @@ export default function ResultsPage() {
             ))}
           </section>
 
-          {/* Filtro de categorias */}
-          <CategoryFilter active={activeFilter} onChange={setActiveFilter} />
+          {/* Filtro de categorias (só quando há resultados reais) */}
+          {resultCategories.length > 0 && (
+            <CategoryFilter
+              categories={resultCategories}
+              active={activeFilter}
+              onChange={setActiveFilter}
+            />
+          )}
 
-          {/* Pódios por categoria */}
+          {/* Pódios por categoria — dados de GET /api/results */}
           <div className="flex flex-col gap-space-xl">
-            {filteredCategories.length === 0 ? (
+            {loadError ? (
+              <div className="mx-auto max-w-lg text-center bg-surface-container-low/70 backdrop-blur-xl border border-outline-variant/30 rounded-2xl p-8">
+                <span className="material-symbols-outlined text-primary text-[40px] mb-2">hourglass_top</span>
+                <p className="font-sans text-body-md text-on-surface-variant">{loadError}</p>
+              </div>
+            ) : !results ? (
+              <div className="flex flex-col items-center gap-3 py-12">
+                <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
+                <span className="font-sans text-body-sm text-on-surface-variant">Apurando os votos no cartório...</span>
+              </div>
+            ) : filteredCategories.length === 0 ? (
               <p className="text-center font-sans text-body-sm text-on-surface-variant">
                 Nenhuma categoria encontrada para este filtro.
               </p>

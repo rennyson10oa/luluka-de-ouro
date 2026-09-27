@@ -3,7 +3,7 @@ import { MOCK_ACTIVITY } from '../../data/mockProfile'
 /**
  * ActivityTimeline — "Atividade Recente na Assembleia".
  * Timeline agrupada por período (Hoje/Ontem) con línea vertical dorada.
- * Datos cenográficos (MOCK_ACTIVITY) hasta que el backend los exponga.
+ * Dados cenográficos (MOCK_ACTIVITY) até que o backend os exponha.
  */
 export default function ActivityTimeline() {
   return (

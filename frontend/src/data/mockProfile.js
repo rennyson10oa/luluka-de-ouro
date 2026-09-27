@@ -1,5 +1,5 @@
 /**
- * mockProfile — datos mock das seções não-backend do Perfil do Usuario.
+ * mockProfile — dados mock das seções não-backend do Perfil do Usuário.
  * Honrarias, candidaturas próprias e atividade recente são cenográficas
  * até que o backend exponga esses endpoints (próxima sprint).
  */

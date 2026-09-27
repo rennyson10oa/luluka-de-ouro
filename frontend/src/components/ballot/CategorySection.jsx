@@ -4,8 +4,8 @@ import NomineeCard from './NomineeCard'
  * CategorySection — seção de categoria da cédula.
  *
  * Cabeçalho: pill "Categoria 0N" + badge "1 Voto Mandatório" (sempre, como no
- * design desktop) + badge de estado que alterna entre "Seleccionada" (check) e
- * "Pendiente de Voto" — espelhando os 3 estados do design.
+ * design desktop) + badge de estado que alterna entre "Selecionada" (check) e
+ * "Pendente de Voto" — espelhando os 3 estados do design.
  *
  * Grid de NomineeCards: grid-cols-1 sm:grid-cols-2 (empilham no mobile).
  */
@@ -43,12 +43,12 @@ export default function CategorySection({ index, category, selection, onToggle, 
         {hasSelection ? (
           <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary font-sans font-bold text-label-sm">
             <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-            Seleccionada
+            Selecionada
           </span>
         ) : (
           <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high text-on-surface-variant font-sans font-semibold text-label-sm">
             <span className="material-symbols-outlined text-[16px]">radio_button_unchecked</span>
-            Pendiente de Voto
+            Pendente de Voto
           </span>
         )}
       </div>

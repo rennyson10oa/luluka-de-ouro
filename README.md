@@ -33,7 +33,7 @@ O fluxo é simples:
 
 | Camada            | Tecnologia                              |
 | ----------------- | --------------------------------------- |
-| Linguagem         | Python 3.11+                            |
+| Linguagem         | Python 3.12 (Poetry)                    |
 | Framework         | FastAPI                                 |
 | ORM               | SQLAlchemy                              |
 | Banco de dados    | SQLite                                  |
@@ -47,7 +47,6 @@ O fluxo é simples:
 | --------------- | ---------------------------------------- |
 | Framework       | React 18 com Vite                        |
 | Estilização     | TailwindCSS                              |
-| Animações       | Framer Motion                            |
 | 3D              | Three.js via `@react-three/fiber` e `@react-three/drei` |
 
 ---
@@ -96,16 +95,16 @@ pequenas (a partir de 360px).
 │   │   ├── assets/          Imagens e CSS global
 │   │   ├── components/      Componentes reutilizáveis (UI, 3D)
 │   │   ├── pages/           Telas (Landing, Login, Candidaturas, Votação, Reveal, Resultados)
-│   │   ├── hooks/           Hooks customizados (API, Auth)
-│   │   ├── store/           Gerenciamento de estado
+│   │   ├── hooks/           Hooks customizados (API, Auth, estado da gala)
 │   │   └── App.jsx           Configuração de rotas
 │   ├── index.html
 │   ├── package.json
 │   ├── tailwind.config.js
 │   └── vite.config.js
 ├── docs/                    Documentação do projeto
+├── uploads/                 Avatares salvos pelo backend (volume no deploy)
 ├── Dockerfile               Build do front e execução do Uvicorn
-├── requirements.txt         Dependências do Python
+├── requirements.txt         Dependências do Python (via pip, sem Poetry)
 └── .env                     Variáveis de ambiente (não versionado)
 ```
 
@@ -138,27 +137,69 @@ pequenas (a partir de 360px).
 
 ## Desenvolvimento
 
-### Backend
+### Backend (Poetry — como o projeto de fato roda)
+
+O backend usa **Poetry** com Python 3.12. Os comandos abaixo são executados
+**SEMPRE a partir da raiz do repositório** — nunca de dentro de `backend/`:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn backend.main:app --reload
+# 1. Instalar dependências (cria o virtualenv do Poetry automaticamente)
+cd backend && poetry install && cd ..
+
+# 2. Semear o banco (app.db: usuários + categorias + candidaturas de exemplo)
+poetry run python -m backend.seed
+
+# 3. Subir a API em :8000
+poetry run python -m uvicorn backend.main:app --port 8000
 ```
+
+> ⚠️ A `DATABASE_URL` é relativa (`sqlite:///app.db`): rodar de outro diretório
+> cria um `app.db` fantasma em lugar errado. Da raiz, sempre.
+
+Alternativa sem Poetry (o `requirements.txt` existe para essa via):
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python -m backend.seed
+uvicorn backend.main:app --port 8000   # a partir da raiz
+```
+
+Contribuições de desenvolvimento correntes:
+
+| Comando (da raiz)                          | O que faz                          |
+| ------------------------------------------ | ---------------------------------- |
+| `poetry run python -m backend.seed`        | Recria/popula `app.db` (NÃO apaga) |
+| `poetry run pytest backend/tests/ -q`     | Testes (usam SQLite temporário)    |
+| `curl localhost:8000/api/state`            | Estado vivo da gala                |
+
+- A API expõe os docs interativos em [`localhost:8000/docs`](http://localhost:8000/docs).
+- Senha do painel admin vem de `backend/.env` (`ADMIN_PASSWORD`, padrão `admin123`).
+- Configuração do perfil: `backend/.env` (`ADMIN_PASSWORD`, `JWT_SECRET`,
+  `DATABASE_URL`; `UPLOAD_DIR` para avatares, padrão `uploads/`).
 
 ### Frontend
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev        # :5173 — o Vite já faz proxy de /api → :8000
 ```
+
+> O servidor do backend precisa estar rodando antes (o proxy depende dele).
+> Build de produção: `npm run build` → `frontend/dist`.
 
 ### Variáveis de ambiente
 
-Copie `.env.example` para `.env` e preencha os valores necessários (chave JWT,
-URL do banco, etc.).
+`backend/.env` (não versionado):
+
+```env
+ADMIN_PASSWORD=admin123
+JWT_SECRET=<troque em produção>
+DATABASE_URL=sqlite:///app.db
+```
+
+Não existe `.env` no frontend — o proxy do Vite resolve as chamadas `/api/*`.
 
 ---
 

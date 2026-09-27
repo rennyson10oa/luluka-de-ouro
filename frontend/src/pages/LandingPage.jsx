@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import Header from '../components/Header'
 import { Footer } from '../components/Footer'
 import useVoteNav from '../hooks/useVoteNav'
+import useGalaState from '../hooks/useGalaState'
 import Trophy3D from '../components/Trophy3D'
 import Countdown from '../components/Countdown'
 
@@ -160,6 +161,9 @@ function HeroSection() {
 
 function CTASection() {
   const goVote = useVoteNav()
+  // Total real de votos vem de GET /api/state; fallback 12 enquanto carrega.
+  const { totalVotos } = useGalaState()
+  const totalVotosLabel = (totalVotos ?? 12).toLocaleString('pt-BR')
   return (
     <section className="w-full px-6 lg:px-12 py-14 flex flex-col items-center text-center">
       <div className="flex flex-col sm:flex-row items-center justify-center gap-space-md w-full max-w-md mx-auto mb-6">
@@ -183,10 +187,10 @@ function CTASection() {
         </a>
       </div>
 
-      {/* Vote stats (mock) */}
+      {/* Votos reais de GET /api/state (total_votos); "42 membros" segue mock. */}
       <div className="inline-flex items-center gap-space-sm px-space-lg py-2 rounded-full bg-surface-container/70 backdrop-blur-md shadow-md text-on-surface-variant font-sans text-body-sm">
         <span className="material-symbols-outlined text-primary text-[18px]">how_to_vote</span>
-        <span><strong>1.428</strong> votos já computados em sigilo absoluto</span>
+        <span><strong>{totalVotosLabel}</strong> votos já computados em sigilo absoluto</span>
         <span className="w-1 h-1 rounded-full bg-outline" />
         <span className="text-secondary">42 membros da Academia já votaram</span>
       </div>
