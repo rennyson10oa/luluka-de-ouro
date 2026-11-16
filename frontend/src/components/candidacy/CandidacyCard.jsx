@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { MOCK_CATEGORIES } from '../../data/mockAdmin'
 
 /**
  * CandidacyCard — card de candidatura ativa na Urna de Candidaturas.
@@ -22,9 +21,9 @@ function formatSubmittedAt(iso) {
 export default function CandidacyCard({ candidacy, isClosed, onEdit, onShare }) {
   const [expanded, setExpanded] = useState(false)
 
-  // Descrição canônica da categoria (leitura apenas — nunca muta MOCK_CATEGORIES).
-  const category = MOCK_CATEGORIES.find((c) => c.id === candidacy.categoryId) || null
-  const description = category?.description || ''
+  // Descrição da categoria: a API não expõe esse campo (ADR-0002) — o card
+  // segue sem ela até existir conteúdo server-side (degradação silenciosa).
+  const description = ''
 
   const isHomologada = candidacy.status === 'homologada'
   const canEdit = !isClosed
@@ -42,7 +41,9 @@ export default function CandidacyCard({ candidacy, isClosed, onEdit, onShare }) 
           </div>
           <div className="min-w-0">
             <h3 className="font-serif font-bold text-headline-sm text-on-surface leading-tight">{candidacy.categoryTitle}</h3>
-            <p className="font-sans text-body-sm text-on-surface-variant mt-0.5">{description}</p>
+            {description && (
+              <p className="font-sans text-body-sm text-on-surface-variant mt-0.5">{description}</p>
+            )}
           </div>
         </div>
 

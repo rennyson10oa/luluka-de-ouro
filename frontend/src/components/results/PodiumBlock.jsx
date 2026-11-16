@@ -22,7 +22,9 @@ function useFadeIn() {
  *   - Desktop (lg:grid-cols-3): 2º | 1º | 3º via lg:order-1 / lg:order-2 / lg:order-3.
  *
  * Props:
- *   - category: item de RESULT_CATEGORIES (mockResults.js).
+ *   - category: resultado REAL de GET /api/results, mapeado para o shape
+ *     {id,title,podium:{first,second,third,honorable}} pela ResultsPage
+ *     (mappings com fallbacks — pódio incompleto nunca quebra o card).
  *   - index: número 1-based da categoria no dataset (rótulo "Categoria 0N").
  */
 export default function PodiumBlock({ category, index }) {

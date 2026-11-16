@@ -3,7 +3,7 @@ import useCandidacies from '../../hooks/useCandidacies'
 
 /**
  * MyCandidacies — "Painel Eleitoral Próprio / Minhas Candidaturas Homologadas".
- * Lê o store compartilhado (pg_candidacies) via useCandidacies — os mesmos
+ * Lê o store compartilhado via useCandidacies (agora REAL: POST/PUT /api/candidacies — ADR-0002) — os mesmos
  * dados da Urna de Candidaturas (/candidaturas).
  */
 export default function MyCandidacies({ onToast }) {

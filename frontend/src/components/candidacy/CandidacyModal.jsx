@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
  * Props:
  *   open      — controla a visibilidade do modal.
  *   onClose   — fecha o modal.
- *   category  — objeto MOCK_CATEGORIES (modo criação) ou null.
+ *   category  — categoria REAL (GET /api/categories) no modo criação, ou null.
  *   editing   — candidatura existente (modo edição) ou null.
  *   onSubmit  — (pitch) => { success, error }.
  */

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import apiFetch from '../utils/api'
-import { MAX_CANDIDACIES } from '../data/mockProfile'
+/** Limite de candidaturas por eleitor — espelha a regra que o BACKEND já cobra
+ * (400 "Limit of 4 candidacies per user"). Aqui é só para a UX contar certo. */
+const MAX_CANDIDACIES = 4
 import useAuth from './useAuth'
 import useGalaState from './useGalaState'
 

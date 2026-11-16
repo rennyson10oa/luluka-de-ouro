@@ -1,48 +1,49 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import Header from '../components/Header'
 import { Footer } from '../components/Footer'
 import useVoteNav from '../hooks/useVoteNav'
 import useGalaState from '../hooks/useGalaState'
 import useGalaEvents from '../hooks/useGalaEvents'
+import { apiFetch } from '../utils/api'
 import Trophy3D from '../components/Trophy3D'
 import Countdown from '../components/Countdown'
 
 // Mock categories data — replace with /api/categories when API is ready
-const MOCK_CATEGORIES = [
-  {
-    id: 'participacao-especial',
-    emoji: '🎭',
-    title: 'Melhor Participação Especial',
+/**
+ * COPY cenográfica das categorias da landing (decisão de limpeza dos mocks):
+ * as frases são conteúdo de zoeira, mas os DADOS agora vêm do servidor.
+ * Chave = título normalizado (minúsculas). Categoria criada pelo admin sem
+ * copy aqui recebe descrição genérica — a landing nunca mostra dado falso.
+ */
+const CATEGORY_COPY = {
+  'melhor participação especial': {
     description: 'Dedicado àquele sujeito lendário que sumiu por 8 meses seguidos, não respondeu "bom dia", mas do nada dropou um áudio bombástico de 4 minutos no meio do expediente e evaporou de novo.',
-    nominees: 5,
     favorite: '"O Fantasma do Zap"',
   },
-  {
-    id: 'mais-pataquadas',
-    emoji: '🤡',
-    title: 'Membro com Mais Pataquadas',
+  'membro com mais pataquadas': {
     description: 'O acervo vivo de gafes, prints censurados, mensagens mandadas no grupo errado, compras absurdas na Shopee e mancadas memoráveis que mantiveram o entretenimento do grupo no teto.',
-    nominees: 6,
     favorite: 'Recorde: 48 prints incriminadores',
   },
-  {
-    id: 'mais-mitadas',
-    emoji: '👑',
-    title: 'Membro com Mais Mitadas',
+  'membro com mais mitadas': {
     description: 'Respostas cirúrgicas na velocidade da luz, stickers milimetricamente calculados, jogadas inacreditáveis na call do Discord e tiradas que calaram a boca de todos instantaneamente.',
-    nominees: 4,
     favorite: 'Critério: Destruição retórica',
   },
-  {
-    id: 'qi-temperatura-ambiente',
-    emoji: '🌡️',
-    title: 'QI de Temperatura Ambiente',
+  'qi de temperatura ambiente': {
     description: 'Para raciocínios que desafiaram a ciência, hipóteses astronômicas sem pé nem cabeça, confusões geográficas imperdoáveis e teorias que deixaram todos na call em silêncio absoluto por 20 segundos.',
-    nominees: 7,
     favorite: 'Média térmica: 22° Celsius',
   },
-]
+}
+
+/** Descrição genérica para categoria sem copy cenográfica registrada. */
+const COPY_GENERICO = {
+  description: 'Disputa oficial da gala: vote no mais merecedor — ou no menos merecedor, o critério é seu.',
+  favorite: 'Critério: puro e honesto caos',
+}
+
+function normalizeTitle(title) {
+  return String(title || '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
 
 function CategoryCard({ category }) {
   const goVote = useVoteNav()
@@ -203,6 +204,33 @@ function CTASection() {
 }
 
 function CategoriesSection() {
+  // Categorias REAIS (GET /api/categories): contagem de indicados é o número
+  // do servidor; a copy é cenográfica por título. Máx. 6 cards na landing.
+  const [categories, setCategories] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const res = await apiFetch('/api/categories')
+      if (cancelled) return
+      setCategories(res.ok && Array.isArray(res.data) ? res.data.slice(0, 6) : [])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (categories === null) {
+    return (
+      <section id="categorias" className="w-full max-w-7xl mx-auto px-6 lg:px-12 py-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+          {[1, 2].map((n) => (
+            <div key={n} className="h-64 rounded-2xl bg-surface-container/40 animate-pulse" />
+          ))}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section id="categorias" className="w-full max-w-7xl mx-auto px-6 lg:px-12 py-16">
       {/* Section header */}
@@ -217,15 +245,33 @@ function CategoriesSection() {
           </h2>
         </div>
         <p className="font-sans text-body-md text-on-surface-variant max-w-md">
-          Quatro das doze categorias oficiais abertas para votação popular. O voto é secreto, mas o bullying subsequente é 100% público.
+          As categorias oficiais abertas para votação popular. O voto é secreto, mas o bullying subsequente é 100% público.
         </p>
       </div>
 
       {/* Cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
-        {MOCK_CATEGORIES.map(cat => (
-          <CategoryCard key={cat.id} category={cat} />
-        ))}
+        {categories.map((cat) => {
+          const copy = CATEGORY_COPY[normalizeTitle(cat.title)] || COPY_GENERICO
+          return (
+            <CategoryCard
+              key={cat.id}
+              category={{
+                id: cat.id,
+                emoji: cat.emoji,
+                title: cat.title,
+                nominees: cat.candidacies?.length || 0,
+                description: copy.description,
+                favorite: copy.favorite,
+              }}
+            />
+          )
+        })}
+        {categories.length === 0 && (
+          <p className="font-sans text-body-md text-outline italic">
+            As categorias da gala ainda não foram publicadas — fique de olho.
+          </p>
+        )}
       </div>
     </section>
   )

@@ -6,19 +6,18 @@ import useGalaState from './useGalaState'
 /**
  * useBallot — lógica da cédula de votação contra o backend REAL (Fase 2).
  *
- * Diferente do mock anterior, NÃO existe storage de votos: o voto vive só no
- * servidor (POST /api/votes). Consequência assumida por design (ADR-0002):
- * após um reload da página a cédula volta "limpa", porque não há GET de votos
- * por eleitor — o backend preserva o sigilo notarial. O usuário pode votar de
- * novo (o POST faz upsert); a tela de selo é um estado de sessão.
+ * O voto vive só no servidor (POST /api/votes com upsert por categoria). O
+ * estado de "selado" SOBREVIVE a reload: a cédula rehidrata de
+ * GET /api/votes/me, com selo do servidor (GET /api/votes/me/stamp,
+ * determinístico) e horário do registro (created_at de cada voto).
  *
  * Fluxo:
  *   1. GET /api/categories (sem auth) → mapeia para o shape já consumido
  *      pelas telas: { id, title, emoji, modo, description, nominees }.
  *   2. Seleção local (voto em branco = categoria sem seleção / null).
  *   3. sealVotes() → POST /api/votes para CADA seleção não-nula com Bearer.
- *      Se todos os POSTs voltarem ok: marca hasSealed, gera o hash fake
- *      #GALA-2025-XXXXXX (permanece cosmético por design) e registra o horário.
+ *      Se todos os POSTs voltarem ok: marca hasSealed, busca o selo real
+ *      (stamp) no cartório e registra o horário.
  *
  * Regras cobertas:
  *   1. 1 voto por categoria (o POST faz upsert server-side).
