@@ -133,6 +133,22 @@ export default function ProfileHeader({ user }) {
     await loadAvatar()
   }
 
+  /** Remove o avatar (DELETE real: apaga o arquivo do servidor + referência). */
+  async function handleAvatarRemove() {
+    setUploading(true)
+    const res = await apiFetch('/api/users/me/avatar', { method: 'DELETE', token: true })
+    setUploading(false)
+    if (res.ok || res.status === 204) {
+      setAvatarError('')
+      // Revoga o objectURL anterior e volta ao ícone dourado padrão.
+      replaceObjectUrl(null)
+    } else if (res.status === 401) {
+      setAvatarError('Sessão expirada: entre na gala novamente.')
+    } else {
+      setAvatarError('Falha ao remover a foto. Tente novamente.')
+    }
+  }
+
   const displayName = user?.vulgo || user?.username || 'Eleitor Anônimo'
   const handle = user?.username || ''
 
@@ -193,12 +209,13 @@ export default function ProfileHeader({ user }) {
           {uploading ? 'Enviando...' : 'Alterar foto'}
         </button>
         {avatarUrl && (
-          // Exclusão de avatar FICA PARA A FASE 3 (não há DELETE no backend).
+          // Exclusão REAL (DELETE /api/users/me/avatar): apaga arquivo + referência.
           <button
             type="button"
-            disabled
-            title="Exclusão de avatar chega na Fase 3"
-            className="px-3 py-1.5 rounded-lg bg-surface-container text-outline text-label-sm uppercase tracking-wider flex items-center gap-1.5 opacity-50 cursor-not-allowed"
+            onClick={handleAvatarRemove}
+            disabled={uploading}
+            title="Remover foto de perfil"
+            className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-outline hover:text-error text-label-sm uppercase tracking-wider flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined text-[16px]">delete</span>
             Remover

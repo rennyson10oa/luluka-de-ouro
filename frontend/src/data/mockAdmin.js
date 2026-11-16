@@ -1,6 +1,12 @@
 /**
  * mockAdmin — dados mock do Painel Soberano.
- * Substituir por /api/admin/* quando o backend FastAPI estiver pronto.
+ *
+ * FASE ATUAL: o AdminPanel NÃO consome mais este arquivo (stats, categorias e
+ * ata agora vêm da API real). MOCK_CATEGORIES ainda é lido por
+ * components/candidacy/CandidacyCard.jsx (rótulo cosmético de categoria).
+ * MOCK_STATS / MOCK_AUDIT_LOG / TOTAL_VOTES estão ÓRFÃOS — limpeza futura,
+ * junto com a migração do CandidacyCard para /api/categories. Não apagar
+ * antes de remover o último consumidor.
  */
 
 export const MOCK_STATS = [

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 class Token(BaseModel):
     access_token: str
@@ -81,6 +81,51 @@ class AdminCandidacyCreate(BaseModel):
     category_id: int
     username: str
     pitch: str = Field(..., max_length=280)
+
+
+class ChatCreate(BaseModel):
+    text: str = Field(..., min_length=1, max_length=280)
+
+
+class ChatMessageResponse(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    text: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CategoryCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=80)
+    # Emoji é opcional na criação (categorias sem ícone são válidas).
+    emoji: str = Field("", max_length=8)
+    modo: Literal["candidatos", "aberta"]
+    reveal_order: int = Field(..., ge=1)
+
+
+class CategoryUpdate(BaseModel):
+    # Todos opcionais: apenas os campos enviados são aplicados.
+    title: Optional[str] = Field(None, min_length=1, max_length=80)
+    emoji: Optional[str] = Field(None, max_length=8)
+    modo: Optional[Literal["candidatos", "aberta"]] = None
+    reveal_order: Optional[int] = Field(None, ge=1)
+
+
+class NomineeCreate(BaseModel):
+    category_id: int
+    # Label exibido do indicado; vira o username normalizado do convidado.
+    username: str = Field(..., min_length=1, max_length=30)
+    pitch: str = Field("", max_length=280)
+
+class AuditLogResponse(BaseModel):
+    id: int
+    actor: str
+    action: str
+    detail: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
 
 class PodiumItem(BaseModel):
     user_id: int

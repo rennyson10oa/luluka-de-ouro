@@ -82,8 +82,9 @@ export default function useBallot() {
 
   // Hidratação do selo: GET /api/votes/me devolve as cédulas JÀ registradas
   // pelo eleitor autenticado. Com isso, o estado de "selado" sobrevive a
-  // reload e navegação (antes era memória de sessão do hook).
-  // hash fica null na hidratação — o hash é cosmético e nasce a cada selada.
+  // reload e navegação. O SELO também rehidrata: o hash vem do servidor
+  // (GET /api/votes/me/stamp — determinístico sobre a cesta) e o horário,
+  // do timestamp gravado em cada voto.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -91,10 +92,17 @@ export default function useBallot() {
       if (cancelled || !res.ok || !Array.isArray(res.data)) return
       if (res.data.length > 0) {
         const hyd = {}
+        let maisRecente = null
         res.data.forEach((v) => {
           hyd[v.category_id] = v.voted_user_id
+          if (v.voted_at && (!maisRecente || v.voted_at > maisRecente)) maisRecente = v.voted_at
         })
         setSealedVotes(hyd)
+        // Selo do servidor cai para cosmético local se o endpoint falhar.
+        const stamp = await apiFetch('/api/votes/me/stamp', { token: true })
+        if (cancelled) return
+        const hash = stamp.ok && stamp.data?.stamp ? stamp.data.stamp : generateHash()
+        setSealedMeta({ hash, at: maisRecente })
       }
     })()
     return () => {
@@ -189,7 +197,12 @@ export default function useBallot() {
       posted[Number(categoryId)] = Number(votedUserId)
     }
 
-    const hash = generateHash()
+    // Selo notarial REAL: hash calculado no servidor sobre a cesta registrada
+    // (GET /api/votes/me/stamp). Fallback: hash cosmético local se o cartório
+    // não responder — a cédula nunca fica sem selo.
+    const stampRes = await apiFetch('/api/votes/me/stamp', { token: true })
+    const hash = stampRes.ok && stampRes.data?.stamp ? stampRes.data.stamp : generateHash()
+
     const at = new Date().toISOString()
     // Mantém o shape consumido pela tela de selo (sealedVotes[cat.id] → user_id),
     // reconstruído a partir dos POSTs aceitos pelo servidor.

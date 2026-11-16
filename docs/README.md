@@ -25,7 +25,9 @@ sequência recomendada de leitura.
 
 | ADR | Status | Assunto |
 |-----|--------|---------|
-| [ADR-0001](arquitetura/adrs/adr-0001-auth-provider-e-header-persistente.md) | Proposto | AuthProvider reativo + Header persistente no layout (origem: bug do tamanho alternado do troféu 3D) |
+| [ADR-0001](arquitetura/adrs/adr-0001-auth-provider-e-header-persistente.md) | Aceito parcial | AuthProvider reativo + Header persistente no layout (origem: bug do tamanho alternado do troféu 3D) |
+| [ADR-0002](arquitetura/adrs/adr-0002-integracao-mocks-backend.md) | Aceito | Integração dos mocks ao backend real (Fase 2): contrato de endpoints + upload de avatar |
+| [ADR-0003](arquitetura/adrs/adr-0003-tempo-real-sse-hub.md) | Aceito | Tempo real da gala: hub SSE + comandos via REST (cerimônia dirigida, chat, CRUD admin) |
 
 ## Backend
 

@@ -3,8 +3,10 @@ from fastapi.testclient import TestClient
 from backend.main import app
 from backend.database import Base, get_db, SessionLocal
 from backend.models import models
+from backend.core.config import settings as app_config
 
 import os
+from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 
 @pytest.fixture(scope="session")
@@ -168,3 +170,213 @@ def test_upload_avatar_acima_200kb(client, db_session):
     )
     assert resp.status_code == 413
     assert resp.json()["detail"] == "Avatar excede 200KB"
+
+
+# ---------------------------------------------------------------------------
+# Helpers dos testes da onda de tempo real (SSE/chat/cerimônia)
+# ---------------------------------------------------------------------------
+def _user_headers(client, username: str) -> dict:
+    """Registra um usuário novo e devolve o header Authorization com o JWT."""
+    resp = client.post("/api/register", json={"username": username, "password": "123"})
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+def _admin_headers(client) -> dict:
+    """Faz login administrativo e devolve o header com o JWT de admin."""
+    resp = client.post("/api/admin/login", json={"password": app_config.ADMIN_PASSWORD})
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+# ---------------------------------------------------------------------------
+# Chat (Objetivo 1)
+# ---------------------------------------------------------------------------
+def test_chat_requires_auth(client, db_session):
+    # Sem ticket/JWT de usuário o chat é fechado (a gala é só do grupo).
+    resp = client.post("/api/chat", json={"text": "oi"})
+    assert resp.status_code == 401
+
+
+def test_chat_roundtrip(client, db_session):
+    headers = _user_headers(client, "chat_user")
+
+    resp = client.post("/api/chat", json={"text": "Boa noite, gala!"}, headers=headers)
+    assert resp.status_code == 201, resp.text
+    criada = resp.json()
+    assert criada["text"] == "Boa noite, gala!"
+    assert criada["username"] == "chat_user"
+    assert isinstance(criada["id"], int)
+    assert criada["created_at"] is not None
+
+    recentes = client.get("/api/chat/recent", headers=headers)
+    assert recentes.status_code == 200, recentes.text
+    ids = [msg["id"] for msg in recentes.json()]
+    assert criada["id"] in ids
+
+
+# ---------------------------------------------------------------------------
+# Handshake do hub SSE (Objetivo 2/3)
+# ---------------------------------------------------------------------------
+def test_ticket_flow(client, db_session):
+    headers = _user_headers(client, "sse_user")
+
+    # JWT normal troca por um ticket de uso único (o JWT não vai na query).
+    resp = client.post("/api/events/ticket", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ticket"]
+
+    # Ticket inválido é recusado ANTES de abrir o stream.
+    resp = client.get("/api/events", params={"ticket": "ticket-invalido"})
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Cerimônia dirigida (Objetivo 4)
+# ---------------------------------------------------------------------------
+def test_ceremony_requires_scheduling(client, db_session):
+    # Settings do fixture nasce sem reveal_at → iniciar é proibido.
+    headers = _admin_headers(client)
+    resp = client.post("/api/admin/ceremony/start", headers=headers)
+    assert resp.status_code == 403
+    assert "Agende" in resp.json()["detail"]
+
+
+def test_ceremony_start_after_reveal_at(client, db_session):
+    # reveal_at no passado = horário mínimo já atingido → admin pode iniciar.
+    settings = db_session.query(models.Settings).first()
+    settings.reveal_at = datetime.now() - timedelta(minutes=1)
+    settings.ceremony_phase = None
+    settings.ceremony_category_id = None
+    settings.ceremony_revealed = "[]"
+    db_session.commit()
+
+    headers = _admin_headers(client)
+    resp = client.post("/api/admin/ceremony/start", headers=headers)
+    assert resp.status_code == 200, resp.text
+    corpo = resp.json()
+    assert corpo["phase"] == "abertura"
+    assert corpo["category_id"] is None
+    assert corpo["revealed"] == []
+
+    # A posição pública reflete o mesmo estado (fonte da verdade do cliente).
+    posicao = client.get("/api/ceremony/position")
+    assert posicao.status_code == 200
+    assert posicao.json()["phase"] == "abertura"
+
+
+def test_ceremony_full_reveal_flow(client, db_session):
+    """Fluxo novo (decisão do dono): categoria revelada INTEIRA de uma vez.
+    start → next (chama cat) → reveal (sem order) → next (fecha) → abertura."""
+    settings = db_session.query(models.Settings).first()
+    settings.reveal_at = datetime.now() - timedelta(minutes=1)
+    settings.ceremony_phase = None
+    settings.ceremony_category_id = None
+    settings.ceremony_revealed = "[]"
+    db_session.commit()
+
+    # Categoria para a cerimônia operar.
+    cat = models.Category(title="Flow Test", emoji="🏆", modo="candidatos", reveal_order=90)
+    db_session.add(cat)
+    db_session.commit()
+
+    headers = _admin_headers(client)
+    assert client.post("/api/admin/ceremony/start", headers=headers).status_code == 200
+
+    chamada = client.post("/api/admin/ceremony/next", headers=headers)
+    assert chamada.status_code == 200
+    assert chamada.json()["phase"] == "categoria"
+    assert chamada.json()["category_id"] == cat.id
+
+    revel = client.post("/api/admin/ceremony/reveal", headers=headers)
+    assert revel.status_code == 200
+    assert revel.json()["phase"] == "revelacao"
+    assert revel.json()["full_reveal"] is True
+
+    fechada = client.post("/api/admin/ceremony/next", headers=headers)
+    assert fechada.status_code == 200
+    assert fechada.json()["phase"] in ("abertura", "encerramento")
+    assert cat.id in fechada.json()["revealed"]
+
+
+# ---------------------------------------------------------------------------
+# CRUD admin de categorias (Objetivo 5)
+# ---------------------------------------------------------------------------
+def test_admin_categories_crud(client, db_session):
+    headers = _admin_headers(client)
+
+    criada = client.post(
+        "/api/admin/categories",
+        json={
+            "title": "Categoria Admin",
+            "emoji": "🏆",
+            "modo": "candidatos",
+            "reveal_order": 1,
+        },
+        headers=headers,
+    )
+    assert criada.status_code == 201, criada.text
+    categoria = criada.json()
+    assert categoria["title"] == "Categoria Admin"
+    assert categoria["candidacies"] == []
+
+    editada = client.put(
+        f"/api/admin/categories/{categoria['id']}",
+        json={"title": "Categoria Editada", "reveal_order": 2},
+        headers=headers,
+    )
+    assert editada.status_code == 200, editada.text
+    assert editada.json()["title"] == "Categoria Editada"
+    assert editada.json()["reveal_order"] == 2
+
+    apagada = client.delete(
+        f"/api/admin/categories/{categoria['id']}", headers=headers
+    )
+    assert apagada.status_code == 204
+
+    # Depois do DELETE a categoria não existe mais (PUT → 404).
+    fantasma = client.put(
+        f"/api/admin/categories/{categoria['id']}",
+        json={"title": "Não existe"},
+        headers=headers,
+    )
+    assert fantasma.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Ata notarial (Objetivo 4)
+# ---------------------------------------------------------------------------
+def test_audit_log(client, db_session):
+    headers = _admin_headers(client)
+
+    # Ata começa vazia neste banco de teste (fixture isolada por transação).
+    vazia = client.get("/api/admin/audit", headers=headers)
+    assert vazia.status_code == 200, vazia.text
+    assert vazia.json() == []
+
+    criada = client.post(
+        "/api/admin/categories",
+        json={
+            "title": "Categoria Audit",
+            "emoji": "📜",
+            "modo": "candidatos",
+            "reveal_order": 7,
+        },
+        headers=headers,
+    )
+    assert criada.status_code == 201, criada.text
+
+    ata = client.get("/api/admin/audit", headers=headers)
+    assert ata.status_code == 200, ata.text
+    registros = ata.json()
+    assert len(registros) == 1
+    registro = registros[0]
+    assert registro["actor"] == "admin"
+    assert registro["action"] == "categoria_criada"
+    assert "Categoria Audit" in registro["detail"]
+    assert registro["created_at"] is not None
+
+    # Sem Bearer de admin a ata não é exposta.
+    sem_auth = client.get("/api/admin/audit")
+    assert sem_auth.status_code == 401
+

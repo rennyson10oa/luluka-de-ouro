@@ -13,6 +13,8 @@ import { useState } from 'react'
 /** Player de áudio DECORATIVO — barra de progresso animada via CSS, sem áudio real. */
 function FakeAudioPlayer({ audio }) {
   const [playing, setPlaying] = useState(false)
+  // Defesa: pódio sem dados (categoria sem votos) não derruba a cerimônia.
+  if (!audio) return null
   return (
     <div className="flex items-center gap-3 p-3 rounded-xl bg-surface-container-lowest/70 border border-outline-variant/30">
       <button
@@ -71,14 +73,22 @@ export default function RevealCard({ category, revealed, onReveal }) {
           E o vencedor é...
         </p>
 
-        <button
-          type="button"
-          onClick={onReveal}
-          className="mt-8 inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-bold text-title-md shadow-[0_0_30px_rgba(212,175,55,0.45)] hover:shadow-[0_0_45px_rgba(212,175,55,0.7)] hover:scale-105 active:scale-95 transition-all"
-        >
-          <span className="material-symbols-outlined text-[22px]">emoji_events</span>
-          Revelar Vencedor
-        </button>
+        {onReveal ? (
+          <button
+            type="button"
+            onClick={onReveal}
+            className="mt-8 inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-bold text-title-md shadow-[0_0_30px_rgba(212,175,55,0.45)] hover:shadow-[0_0_45px_rgba(212,175,55,0.7)] hover:scale-105 active:scale-95 transition-all"
+          >
+            <span className="material-symbols-outlined text-[22px]">emoji_events</span>
+            Revelar Vencedor
+          </button>
+        ) : (
+          // Cerimônia dirigida: ninguém aqui comanda — o botão seria morto.
+          <p className="mt-8 inline-flex items-center gap-2 px-6 py-3 rounded-full bg-surface-container-highest/80 text-outline font-sans text-body-sm">
+            <span className="material-symbols-outlined text-[18px]">theater_comedy</span>
+            Aguardando o mestre de cerimônias revelar...
+          </p>
+        )}
       </div>
     )
   }

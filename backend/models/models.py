@@ -12,6 +12,10 @@ class User(Base):
     # Caminho RELATIVO do avatar em disco (ex.: "uploads/ab12….png").
     # O arquivo em si vive em UPLOAD_DIR (volume no deploy); nada de BLOB no banco.
     avatar = Column(String, nullable=True)
+    # Convidado criado automaticamente pelo admin (indicado sem conta).
+    # A senha é aleatória e nunca exposta; a flag permite limpar o usuário
+    # quando a candidatura dele é removida, sem tocar em contas reais.
+    is_guest = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, server_default=func.now())
 
     candidacies = relationship("Candidacy", back_populates="user")
@@ -49,6 +53,9 @@ class Vote(Base):
     voter_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
     voted_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # Timestamp do voto (permite rehidratar o "Horário do Registro" da cédula).
+    # Nullable: votos anteriores à migração não têm timestamp.
+    created_at = Column(DateTime, nullable=True)
 
     voter = relationship("User", foreign_keys=[voter_id], back_populates="votes_given")
     category = relationship("Category", back_populates="votes")
@@ -64,3 +71,38 @@ class Settings(Base):
     id = Column(Integer, primary_key=True, index=True)
     votacao_aberta = Column(Boolean, nullable=False, default=True)
     reveal_at = Column(DateTime, nullable=True)
+    # Estado da cerimônia dirigida (persistido, fonte da verdade para reconexão).
+    # Fases possíveis: None (não iniciada) | "abertura" | "categoria" |
+    # "revelacao" | "encerramento".
+    ceremony_phase = Column(String, nullable=True)
+    # Categoria em pauta (id de categories) enquanto phase == "categoria"/"revelacao".
+    ceremony_category_id = Column(Integer, nullable=True)
+    # JSON string com os ids das categorias já reveladas (ex.: "[1,2]").
+    ceremony_revealed = Column(String, nullable=True)
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # Username denormalizado: o histórico preserva o nome usado no momento do
+    # envio (o usuário pode trocar de username depois).
+    username = Column(String, nullable=False)
+    text = Column(String(280), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class AuditLog(Base):
+    """Ata notarial das ações administrativas (quem fez, o quê e quando).
+
+    Tabela NOVA: o create_all do main.py já a cria em bancos existentes, sem
+    precisar de ALTER TABLE. `actor` guarda o username do admin autenticado e
+    `action` é uma chave curta (ex.: "categoria_criada") traduzida no frontend.
+    """
+
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    actor = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    detail = Column(String, nullable=False, default="")
+    created_at = Column(DateTime, server_default=func.now())

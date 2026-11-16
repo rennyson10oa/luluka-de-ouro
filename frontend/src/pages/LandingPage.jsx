@@ -4,6 +4,7 @@ import Header from '../components/Header'
 import { Footer } from '../components/Footer'
 import useVoteNav from '../hooks/useVoteNav'
 import useGalaState from '../hooks/useGalaState'
+import useGalaEvents from '../hooks/useGalaEvents'
 import Trophy3D from '../components/Trophy3D'
 import Countdown from '../components/Countdown'
 
@@ -163,7 +164,10 @@ function CTASection() {
   const goVote = useVoteNav()
   // Total real de votos vem de GET /api/state; fallback 12 enquanto carrega.
   const { totalVotos } = useGalaState()
-  const totalVotosLabel = (totalVotos ?? 12).toLocaleString('pt-BR')
+  // Ao vivo (ADR-0003): quando o usuário está logado, o stream único empurra
+  // votes.counter/state.change — o total atualiza sem reload.
+  const { totals } = useGalaEvents()
+  const totalVotosLabel = (totals?.totalVotos ?? totalVotos ?? 12).toLocaleString('pt-BR')
   return (
     <section className="w-full px-6 lg:px-12 py-14 flex flex-col items-center text-center">
       <div className="flex flex-col sm:flex-row items-center justify-center gap-space-md w-full max-w-md mx-auto mb-6">

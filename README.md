@@ -137,24 +137,46 @@ pequenas (a partir de 360px).
 
 ## Desenvolvimento
 
-### Backend (Poetry — como o projeto de fato roda)
+### Início rápido — `dev.sh` (o caminho recomendado)
 
-O backend usa **Poetry** com Python 3.12. Os comandos abaixo são executados
-**SEMPRE a partir da raiz do repositório** — nunca de dentro de `backend/`:
+**Um único comando, de qualquer diretório do terminal** (o script ancora a
+raiz do repo sozinho — evita o `No module named 'backend'` e o `app.db`
+fantasma de rodar de dentro de `backend/`):
 
 ```bash
-# 1. Instalar dependências (cria o virtualenv do Poetry automaticamente)
+./dev.sh api     # backend FastAPI em http://localhost:8000 (docs: /docs)
+./dev.sh front   # Vite dev em http://localhost:5173 (proxy /api → :8000)
+./dev.sh seed    # semear o app.db (usuários + categorias de exemplo)
+./dev.sh test    # pytest do backend (SQLite temporário — não toca no app.db)
+./dev.sh build   # build de produção do frontend → frontend/dist
+```
+
+Os dois do dia a dia:
+
+```bash
+# terminal 1
+./dev.sh api
+# terminal 2
+./dev.sh front
+```
+
+> Primeira vez? Instale antes: `cd backend && poetry install` e `cd frontend && npm install`.
+> O `dev.sh` encontra o virtualenv do Poetry automaticamente (e cai para `.venv`/pip se necessário).
+
+### Backend (detalhes, sem o script)
+
+O backend usa **Poetry** com Python 3.12, e precisa ser executado **a partir
+da raiz do repositório** — nunca de dentro de `backend/`:
+
+```bash
 cd backend && poetry install && cd ..
-
-# 2. Semear o banco (app.db: usuários + categorias + candidaturas de exemplo)
 poetry run python -m backend.seed
-
-# 3. Subir a API em :8000
 poetry run python -m uvicorn backend.main:app --port 8000
 ```
 
 > ⚠️ A `DATABASE_URL` é relativa (`sqlite:///app.db`): rodar de outro diretório
-> cria um `app.db` fantasma em lugar errado. Da raiz, sempre.
+> cria um `app.db` fantasma em lugar errado. Da raiz, sempre — ou use o
+> `dev.sh`, que resolve isso para você.
 
 Alternativa sem Poetry (o `requirements.txt` existe para essa via):
 
@@ -169,8 +191,9 @@ Contribuições de desenvolvimento correntes:
 
 | Comando (da raiz)                          | O que faz                          |
 | ------------------------------------------ | ---------------------------------- |
-| `poetry run python -m backend.seed`        | Recria/popula `app.db` (NÃO apaga) |
-| `poetry run pytest backend/tests/ -q`     | Testes (usam SQLite temporário)    |
+| `./dev.sh seed` ou `poetry run python -m backend.seed` | Popula `app.db` (NÃO apaga) |
+| `./dev.sh test`                            | Testes (usam SQLite temporário)    |
+| `./dev.sh api`                             | API em :8000                       |
 | `curl localhost:8000/api/state`            | Estado vivo da gala                |
 
 - A API expõe os docs interativos em [`localhost:8000/docs`](http://localhost:8000/docs).

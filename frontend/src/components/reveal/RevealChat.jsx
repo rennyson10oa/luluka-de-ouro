@@ -1,62 +1,101 @@
 import { useEffect, useRef, useState } from 'react'
+import useGalaEvents from '../../hooks/useGalaEvents'
 
 /**
- * RevealChat — chat ao vivo mockado da cerimônia.
+ * RevealChat — chat AO VIVO REAL da cerimônia (ADR-0003).
  *
- * Quando ativo, injeta mensagens do pool em intervalos (ciclando),
- * com cap de 8 visíveis. Cleanup rigoroso dos timers.
+ * As mensagens chegam pelo stream único (useGalaEvents) e o envio vai por
+ * REST (POST /api/chat) — o broadcast do servidor traz a própria mensagem
+ * de volta, já deduplicada por id no provider.
+ *
+ * Props:
+ *   active  — chat habilitado (cerimônia aberta); enquanto fechado, só leitura.
+ *   currentUser — { username } para destacar as mensagens do próprio usuário.
  */
 
-const MESSAGE_POOL = [
-  { user: '@Davi_M', text: 'KKKKKKK MERECE DEMAIS! O print virou patrimônio histórico' },
-  { user: '@Marcos_Real', text: 'EU TAVA LÁ NO DIA DO PRINT! O chefe ainda posta indireta kkkkk' },
-  { user: '@Gabi_Design', text: 'Coitado do Bruno bicho, a cara dele quando viu o que fez 😭💀' },
-  { user: '@VovoDoGrupo', text: 'Na minha época isso aí era sumiço da NASA, respeitem os clássicos' },
-  { user: '@FiscalDoChurras', text: 'Requerimento de revisão da ata: eu presenciei, é verídico' },
-  { user: '@LuketaAudio', text: 'áudio de 8 minutos explicando por que mereço o troféu, ESCUTEM' },
-  { user: '@BetoChave', text: 'gente eu juro que o uísque era envelhecido no carvalho 😤' },
-  { user: '@TheusPicanha', text: 'se a Lua muda de lugar quando ninguém tá olhando, meu voto também muda' },
-  { user: '@ReiDoZap', text: 'apuração mais justa que a do Ballon dOr, SEM CONVERSAR' },
-  { user: '@MestreDoSticker', text: 'sticker do momento exato já em produção, patrimônio imortal' },
-]
+export default function RevealChat({ active, currentUser }) {
+  const { chat, sendMessage, status } = useGalaEvents()
+  const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const listRef = useRef(null)
 
-export default function RevealChat({ active }) {
-  const [messages, setMessages] = useState(() => MESSAGE_POOL.slice(0, 3))
-  const poolIndex = useRef(3)
-
+  // Auto-scroll para a última mensagem.
   useEffect(() => {
-    if (!active) return undefined
-    const id = setInterval(() => {
-      setMessages((prev) => {
-        const next = [...prev, MESSAGE_POOL[poolIndex.current % MESSAGE_POOL.length]]
-        poolIndex.current += 1
-        // Cap de 8 visíveis: as mais antigas saem
-        return next.slice(-8)
-      })
-    }, 4000)
-    return () => clearInterval(id)
-  }, [active])
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [chat.length])
+
+  async function handleSend(e) {
+    e.preventDefault()
+    if (!draft.trim() || sending) return
+    setSending(true)
+    setError('')
+    const res = await sendMessage(draft)
+    if (res.success) {
+      setDraft('')
+    } else {
+      setError(res.error)
+    }
+    setSending(false)
+  }
 
   return (
-    <div className="bg-surface-container-lowest/70 backdrop-blur-xl rounded-2xl p-4 border border-outline-variant/30">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+    <div className="bg-surface-container-lowest/70 backdrop-blur-xl rounded-2xl p-4 border border-outline-variant/30 flex flex-col h-[480px]">
+      <div className="flex items-center gap-2 mb-3 shrink-0">
+        <span
+          className={`w-2 h-2 rounded-full animate-pulse ${status === 'conectado' ? 'bg-emerald-400' : 'bg-error'}`}
+        />
         <span className="font-sans font-bold text-label-sm text-secondary uppercase tracking-widest">
-          Atualizando em tempo real
+          {status === 'conectado' ? 'Chat ao vivo do cartório' : 'Reconectando ao cartório...'}
         </span>
       </div>
-      <ul className="flex flex-col gap-2">
-        {messages.map((msg, i) => (
-          <li
-            key={`${msg.user}-${i}`}
-            className="p-2.5 rounded-lg bg-surface-container-low/70 transition-opacity duration-500"
-            style={{ opacity: i === messages.length - 1 ? 1 : 0.75 }}
-          >
-            <span className="font-sans font-semibold text-body-sm text-secondary">{msg.user}: </span>
-            <span className="font-sans text-body-sm text-on-surface-variant">{msg.text}</span>
+
+      {/* Histórico (GET /api/chat/recent + eventos chat.message) */}
+      <ul ref={listRef} className="flex-1 flex flex-col gap-2 overflow-y-auto pr-1 min-h-0">
+        {chat.length === 0 && (
+          <li className="font-sans text-body-sm text-outline italic p-2">
+            Silêncio na gala — seja quem estrear o chat.
           </li>
-        ))}
+        )}
+        {chat.map((msg) => {
+          const mine = currentUser?.username && msg.username === currentUser.username
+          return (
+            <li
+              key={msg.id}
+              className={`p-2.5 rounded-lg transition-opacity duration-500 ${
+                mine ? 'bg-primary/10 border border-primary/20' : 'bg-surface-container-low/70'
+              }`}
+            >
+              <span className="font-sans font-semibold text-body-sm text-secondary">@{msg.username}: </span>
+              <span className="font-sans text-body-sm text-on-surface-variant break-words">{msg.text}</span>
+            </li>
+          )
+        })}
       </ul>
+
+      {/* Envio por REST (POST /api/chat) */}
+      <form onSubmit={handleSend} className="flex items-center gap-2 mt-3 shrink-0">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          maxLength={280}
+          disabled={!active || sending}
+          placeholder={active ? 'Manda a real...' : 'Chat libera quando a cerimônia abre'}
+          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-surface-container-lowest border border-outline-variant/40 text-on-surface font-sans text-body-sm placeholder:text-outline focus:outline-none focus:border-primary/60 disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={!active || sending || !draft.trim()}
+          className="shrink-0 w-9 h-9 rounded-full bg-primary text-on-primary flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition-all"
+        >
+          <span className="material-symbols-outlined text-[18px]">send</span>
+        </button>
+      </form>
+      {error && (
+        <p className="font-sans text-[11px] text-error mt-1 shrink-0">{error}</p>
+      )}
     </div>
   )
 }
