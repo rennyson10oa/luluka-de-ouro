@@ -10,7 +10,7 @@ sequência recomendada de leitura.
 | [`00-visao-geral.md`](produto/00-visao-geral.md) | Visão geral do produto, público-alvo, stack obrigatória e identidade visual |
 | [`04-telas.md`](produto/04-telas.md) | Especificação das telas e fluxos |
 | [`07-checklist.md`](produto/07-checklist.md) | Checklist de execução do projeto |
-| [`08-roteiro-de-verificacao.md`](produto/08-roteiro-de-verificacao.md) | Roteiro de verificação tela por tela — tasks com testes numerados para validar login, registro, votação, candidaturas, perfil, admin, reveal e resultados |
+| [`08-roteiro-de-verificacao.md`](produto/08-roteiro-de-verificacao.md) | Roteiro de verificação tela por tela — Tasks 1–13 + Fases 2–5 EXECUTADAS (integração, tempo real/ADR-0003, deploy) com Registro de Falhas completo |
 
 ## Arquitetura (desenho técnico e decisões)
 

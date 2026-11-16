@@ -2,8 +2,14 @@
 
 Plano de execução para validar a implementação view por view. Complementa o
 [`07-checklist.md`](07-checklist.md) (critérios de aceite final): este documento
-decompõe a verificação em tasks ordenadas, cada uma com testes numerados,
+decompõe a verificação em tasks ordenadas, cada uma com testes numeradas,
 passos e resultado esperado.
+
+> **STATUS (2026-11-16): Tasks 1–13 concluídas; Fases 2 (integração), 3
+> (re-verificação), 4 (tempo real, ADR-0003) e 5 (deploy Docker) EXECUTADAS
+> e registradas no fim deste documento. O único item aberto é o POLISH 1.2
+> (clone no Trophy3D hero). A gala está pronta para o dia do evento — o
+> checklist do deploy está no README.**
 
 ## Como usar
 
@@ -284,41 +290,100 @@ manualmente todas as chaves `pg_*` no DevTools.
 | 3.1 | Login/DB | `joaorei` e `test` rejeitavam a senha do seed (`123`) — foram criados numa execução anterior com outra senha e o `seed.py` pula usuários existentes (comportamento correto, só não detecta drift). **Corrigido:** hashes resetados para `123` via `get_password_hash`. Matriz re-testada: 7/7 usuários → 200; round-trip token → `/api/me` OK. | MINOR | Corrigido |
 | 6.12 | Cédula | **Votos vazavam entre eleitores:** `pg_votes`/`pg_votes_meta` eram chaves globais — selar com o usuário A fazia o usuário B herdar a cédula selada de A. Mesma classe de bug em `pg_candidacies` (dossiê) e `pg_avatar` (foto). **Corrigido:** escopo por `user.id` (`pg_votes:u<id>` etc.) via novo util `utils/userScope.js` (fonte única), aplicado em `useBallot`, `useCandidacies` e `ProfileHeader`, com re-sincronização na hidratação do `useAuth`. Escopo por id (não username) sobrevive à troca de @handle. `pg_reveal_at` permanece global (config da gala). Chaves legadas sem escopo são ignoradas — votos/candidaturas anteriores ao fix precisam ser refeitos. Build OK. | MAJOR | Corrigido |
 | 7.10 | Perfil | **Estado de auth fragmentado (reportado pelo usuário):** cada componente criava sua própria instância de `useAuth` (estado próprio) — trocar vulgo/handle atualizava só o formulário; Header e card do perfil exigiam reload. Era o cenário previsto no ADR-0001. **Corrigido:** `AuthProvider` (contexto único no topo da árvore, em `App.jsx`) com a interface pública intacta — zero mudanças nos consumidores. ADR-0001 movido para "Aceito (AuthProvider implementado; Header persistente pendente)". Comentários do arquivo reescritos em pt-BR. Build OK. | MAJOR | Corrigido |
+| — | Fase 2 | **Admin agendava reveal com drift de fuso (+3h por salvamento):** `new Date(input).toISOString()` convertia para UTC, o SQLite guardava naive, e a releitura tratava como local — cada salvar somava +3h ao horário escolhido. **Corrigido:** o painel envia o datetime-local LITERAL (fuso de parede, ex. `2026-09-25T23:50`), sem conversão; input vazio agora LIMPA o agendamento (`exclude_unset` no `update_settings`). Verificado: 23:50 salvo → 23:50:00 exato. | MAJOR | Corrigido |
+| — | Fase 2 | **Votos "invisíveis" após reload:** o voto SALVAVA (POST 200), mas o frontend não tinha como ler as cédulas do eleitor — selo era memória de sessão e o perfil mostrava "—". **Corrigido:** novo `GET /api/votes/me` (cédulas do próprio eleitor); `useBallot` hidrata o selo; perfil mostra contagem real. | MAJOR | Corrigido |
+| — | Fase 2 | **🔥 O pytest APAGAVA o banco de produção:** a fixture `db_engine` usava o engine real do `app.db` e fazia `drop_all` no fim da sessão — cada rodada de testes destruía o `app.db` (origem do DB vazio da sessão; contas do dono perdidas). **Corrigido:** testes rodam em SQLite TEMPORÁRIO (`tmp_path_factory`), zero contato com produção. | BLOQUEIO | Corrigido |
+| — | Fase 2 | **Dev sem terminal entregava sem testar:** primeira entrega do backend (avatar) sem `python-multipart` (UploadFile quebrava a coleta do pytest) nem registrado no pyproject. **Corrigido pelo CTO:** instalado + registrado no `pyproject.toml` + `requirements.txt` (que estava VAZIO — populado). Lição: toda entrega do dev passa por auditoria + execução real do CTO. | MINOR | Corrigido |
+| — | Deploy/Dev | **Poetry criava venvs DIFERENTES por terminal:** o alacritty (snap) usa `XDG_CACHE_HOME` próprio → dois venvs do mesmo projeto; dependência num não existia no outro (`python-multipart` ausente → API não subia). **Corrigido:** `dev.sh` resolve o venv do Poetry e AUTO-instala dependência faltante; `requirements.txt` populado como via alternativa. | MINOR | Corrigido |
+| — | Dev ops | **`No module named 'backend'` ao rodar de dentro de `backend/`:** `DATABASE_URL` relativa + pacote importável só da raiz. **Corrigido:** script `dev.sh` (ancora a raiz sozinho, funciona de qualquer diretório); README com aviso destacado. | MINOR | Corrigido |
+| — | Fase 4 | **Cerimônia dirigida travada por leitura literal do ADR:** o fluxo do ADR não tinha transição `categoria → revelacao` (deadlock: nada revelava). **Corrigido pelo dev:** 1º reveal muda de fase; `next` em `revelacao` fecha a categoria. Documentado no código. | MAJOR | Corrigido |
+| — | Fase 4 | **SSE ficava 3–15s "conectando":** `StreamingResponse` só manda headers no 1º chunk do gerador — e o gerador começava esperando evento/heartbeat (15s). **Corrigido:** yield imediato de comentário SSE no handshake (`: conectado ao palco`). | MAJOR | Corrigido |
+| — | Fase 4 | **Replay `Last-Event-ID` nunca dispararia:** o `EventSource` só popula o header a partir de linhas `id:` — o hub não as enviava. **Corrigido pelo dev:** `id: <seq>` em todo evento. | MAJOR | Corrigido |
+| — | Fase 4 | **Card crashava com pódio vazio:** categoria sem votos → fallback sem `audio` → `FakeAudioPlayer` quebrava a tela. **Corrigido:** player defensivo + fallback completo no mapeamento. | MAJOR | Corrigido |
+| — | Fase 4 | **Reset da cerimônia voltava ao mock antigo:** fase nula caía no ramo de cerimônia LOCAL (mock de 4 categorias) e o admin perdia o console (só existia no ramo dirigido). **Corrigido:** máquina de 4 estados (dirigida / ensaio / trancada / pré-cerimônia) com console acessível em todos; mock exclusivo do ensaio. | MAJOR | Corrigido |
+| — | Fase 4 | **Botões 3º/2º/1º revelavam tudo junto:** o card visual só tem 2 estágios — três botões eram controle sem efeito. **Corrigido por decisão do dono:** palco simplificado (chamada → revelada inteira), console lista categorias com status e navega sequencial. | MINOR | Corrigido |
+| — | Infra CTO | **Servidores zumbis na porta 8000:** processos de sessões antigas seguravam a porta — novas rotas davam 404 e a ata aparecia vazia (os pedidos batiam no código velho). **Corrigido:** `fuser -k 8000/tcp` (pkill com padrão se autocompilava com o próprio shell). | MINOR | Corrigido |
 
 Severidade sugerida: `BLOQUEIO` (impede o fluxo), `MAJOR` (funcionalidade errada), `MINOR` (visual/texto), `POLISH` (melhoria).
 
 ---
 
-## Fase 2 (planejada) — Integração dos mocks com o backend real
+## Fase 2 (EXECUTADA — 2026-11-14/15) — Integração dos mocks com o backend real
 
-Decisão tomada durante a verificação: terminar as tasks 6–7 (checkpoint), depois
-substituir os mocks que já têm endpoint no backend, e re-verificar de forma
-enxuta (não do zero). O backend já expõe: `GET /api/categories`,
-`POST /api/candidacies`, `PUT /api/candidacies/{id}`, `POST /api/votes`,
-`GET /api/results`, `GET /api/state`, `POST /api/admin/login`,
-`PUT /api/admin/settings`.
+Status: **CONCLUÍDA** (especificada no ADR-0002; implementada em 2 ondas —
+backend pelo @dev, frontend pelo @dev com auditoria do CTO; verificação
+real por curl + browser pelo dono).
 
-| Mock atual | Substituto real | Pendências |
+| Mock original | Substituto real | Status |
 |------------|-----------------|------------|
-| `useBallot` (pg_votes) | `GET /api/categories` + `POST /api/votes` | regra de auto-voto (403) no backend |
-| `useCandidacies` (pg_candidacies) | `POST/PUT /api/candidacies` | validar limite 4 + pitch 280 no backend |
-| Countdown/isClosed (landing, cédula, urna, reveal, resultados) | `GET /api/state` (`reveal_at`, `votacao_aberta`) | remove a tríade `pg_reveal_at` |
-| `useAdminAuth` (senha em env) | `POST /api/admin/login` + `PUT /api/admin/settings` | admin JWT real |
-| `mockResults` | `GET /api/results` | bloqueio 403 real |
-| Stats da landing ("1.428 votos") | `/api/state` (`total_votos`) | vitória barata |
-| Avatar (`pg_avatar:u<id>`) | **Novo endpoint** `POST /api/users/me/avatar` | **Requisitos de segurança (decisão do dono):** armazenar em volume Docker dedicado (nunca no PC do usuário); validação **server-side** do tipo real do arquivo (magic bytes JPEG/PNG/WebP — o `accept="image/*"` do input é só UX, burlável via curl); limite de tamanho (200KB); nome de arquivo aleatório no servidor (nunca o original); servir via endpoint com `Content-Type` correto — nunca executável. **Nuance de arquitetura:** o endpoint não depende do Docker — na Fase 2 salva em `backend/uploads/` (diretório do servidor); na fase de deploy o diretório vira volume nomeado no compose, sem mudança de código. |
+| `useBallot` (pg_votes) | `GET /api/categories` + `POST /api/votes` (upsert) | ✅ |
+| `useCandidacies` (pg_candidacies) | `POST/PUT /api/candidacies` (limite 4 e pitch ≤280 server-side) | ✅ |
+| `pg_reveal_at` (5 arquivos) | `GET /api/state` via hook único `useGalaState` | ✅ |
+| `useAdminAuth` (senha em env) | `POST /api/admin/login` (JWT) + `PUT /api/admin/settings` (null limpa o agendamento) | ✅ |
+| `mockResults` (pódios) | `GET /api/results` (corte `[:4]`: menção honrosa real) | ✅ |
+| Stats da landing | `/api/state` (`total_votos`) ao vivo via stream | ✅ |
+| Avatar | `POST/DELETE /api/users/me/avatar` + serving privado (`magic bytes`, 200KB, nome aleatório, `inline`) | ✅ |
+| Selo da cédula | **REAL:** `GET /api/votes/me/stamp` — SHA-256 server-side determinístico | ✅ |
+| Cédula pós-reload | Hidratação: `GET /api/votes/me` + timestamp de voto (`created_at`) | ✅ |
 
-**Permanecem mock por design** (cosméticos, sem endpoint): chat do reveal,
-player de áudio, honrarias, hash fake do selo, avatar (até existir endpoint
-de upload).
+**Permanecem cenográficos POR DECISÃO** (sem endpoint, conteúdo de marca/ensaio):
+honrarias e timeline do perfil, player de áudio, `RESULT_CATEGORIES` (exclusivo
+do modo ensaio do `/reveal`), copy de categorias da landing (dados reais).
+Mocks apagados: `userScope.js`, `mockAdmin.js`, `pg_*` do storage (exceto
+`pg_token`/`pg_user`/`pg_admin` de sessão).
 
-## Fase 3 (planejada) — Re-verificação enxuta pós-integração
+## Fase 3 (EXECUTADA — 2026-11-15/16) — Re-verificação enxuta pós-integração
 
-Novo roteiro curto cobrindo apenas: fluxo de voto real (incl. auto-voto 403),
-candidaturas reais (limites no servidor), countdown/estados via `/api/state`,
-admin JWT, resultados com bloqueio, end-to-end de verdade e limpeza das
-chaves `pg_*` remanescentes. As tasks 1–5 deste documento permanecem válidas
-como registro histórico (auth real e fluxos de UI não mudam).
+Fluxo re-verificado pelo dono no browser (2 janelas: eleitor + admin), com
+bugs encontrados corrigidos na hora (ver Registro de Falhas abaixo):
+
+- [x] Registro/login de usuários reais; sessão persistente (JWT)
+- [x] Voto real: seleção → selar → POST /api/votes; **auto-voto 403** (curl + UI)
+- [x] Cédula sobrevive ao reload (hidratação de votos/selo/horário)
+- [x] Candidaturas: criar/editar/limites server-side
+- [x] Admin: login JWT, agendamento com fuso correto (sem drift +3h), ata real
+- [x] Avatar: upload (magic bytes/200KB), serving privado, DELETE real
+- [x] Galeria 100% real: pódios, filtros, curiosidades derivadas, badge "ao vivo"
+- [x] Chat real em tempo real (stream), histórico no reconnect
+- [x] Cerimônia dirigida sincronizada (console do palco → todos os convidados)
+- [x] Reset do palco (ensaio geral ilimitado; votos intocados)
+- [x] Contagem de votos ao vivo na landing (stream)
+
+---
+
+## Fase 4 — Tempo real da gala (ADR-0003) — EXECUTADA (2026-11-15/16)
+
+Arquitetura: hub SSE em memória (`/api/events` com ticket de uso único de 60s),
+comandos sempre via REST, `seq` + buffer de 100 eventos com replay por
+`Last-Event-ID`, heartbeat 15s, resync por `GET /api/ceremony/position`.
+Decisões do dono: cerimônia DIRIGIDA (admin comanda, `reveal_at` é só horário
+mínimo), chat autenticado, CRUD de categorias/indicados com convidados
+(`is_guest`), console do palco dentro do `/reveal` (não no painel), palco de
+2 estágios por categoria (chamada → revelada inteira — os botões 3º/2º/1º
+foram aposentados por não terem efeito visual).
+
+- [x] Stream ao vivo (verificado: 10 eventos recebidos em tempo real)
+- [x] Replay por Last-Event-ID (seq 9,10 reenviados após reconexão simulada)
+- [x] Cerimônia dirigida: start→next→reveal→fechar→prev→reset (curl completo)
+- [x] Chat: 201 + broadcast + histórico `GET /api/chat/recent`
+- [x] Indicado convidado: criação automática, login impossível, FK íntegra
+- [x] CRUD admin de categorias (cascata) + indicados + ata notarial real
+- [x] Estados do `/reveal`: dirigida / ensaio / trancada / pré-cerimônia
+- [x] Console do palco acessível em TODOS os estados (admin)
+- [x] Latência do stream: 1º chunk imediato (yield no handshake)
+
+## Fase 5 — Deploy (EXECUTADA — 2026-11-16)
+
+- [x] Dockerfile multi-stage (Node build → Python 3.12-slim) — **testado com
+      Docker real**: build completo, container subindo, SPA 200, DB no volume,
+      seed in-container, login 200
+- [x] `docker-compose.yml`: volumes `gala_data` (SQLite) + `gala_uploads`
+      (avatares); recusa subir sem `JWT_SECRET`/`ADMIN_PASSWORD` do `.env`
+- [x] SPA fallback no FastAPI (`/api` desconhecida → 404, nunca index.html)
+- [x] `.dockerignore` (nada de segredo/DB local na imagem)
+- [x] `Caddyfile.example` (TLS automático, SSE sem buffer; linhas Nginx comentadas)
+- [x] Regra de ouro documentada: **single worker** (hub em memória)
+- [x] README atualizado com checklist do dia da gala
 
 ---
 

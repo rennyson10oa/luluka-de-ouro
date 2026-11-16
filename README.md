@@ -112,12 +112,42 @@ pequenas (a partir de 360px).
 
 ## Build e deploy (container único)
 
-1. **Frontend** — o Vite compila o React para arquivos estáticos em
-   `frontend/dist`.
-2. **Serviço estático** — o FastAPI serve `frontend/dist` na rota raiz `/`,
-   com fallback para `index.html` (suporte ao React Router).
-3. **Docker** — o `Dockerfile` realiza o build do frontend via Node, instala as
-   dependências do Python e sobe o Uvicorn em um único container.
+A imagem constrói o front e serve tudo por um processo só (a API entrega o
+`frontend/dist` com fallback SPA — rodando sem container, o mesmo layout
+funciona se `frontend/dist` existir ao lado do backend).
+
+```bash
+# 1. Secrets de produção (NÃO versionar o .env!)
+cp .env.example .env
+#   → JWT_SECRET forte:  python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+#   → ADMIN_PASSWORD nova (nada de admin123 no deploy real)
+
+# 2. Imagem + serviço
+docker compose up -d --build
+
+# 3. Primeira vez: semear o banco do volume
+docker compose run --rm gala python -m backend.seed
+```
+
+| Item | Onde vive | Persistência |
+|------|-----------|--------------|
+| Banco SQLite | `/app/data/app.db` | volume `gala_data` |
+| Avatares | `/app/uploads/` | volume `gala_uploads` |
+| Secrets | env do compose (de `.env` da raiz) | — |
+
+**Regras de ouro do deploy:**
+
+- ⚠️ **Single worker, sempre** (`--workers 1`): o hub de eventos SSE (ADR-0003)
+  vive na memória do processo — mais de um worker quebra o fanout/replay;
+- **TLS/wss**: proxy de frente recomendado — o exemplo pronto está em
+  `Caddyfile.example` (Caddy faz TLS automático e não bufferiza SSE; para
+  Nginx, desligue buffering e estenda `proxy_read_timeout`);
+- Porta do serviço: 8000 (o proxy é quem expõe 80/443);
+- Migrações: idempotentes no boot (`ALTER TABLE` com try/except) — nada a
+  rodar manualmente além do seed inicial;
+- **Checklist do dia da gala:** `.env` preenchido → `docker compose up -d
+  --build` → seed → login no `/admin` com a senha de produção → agendar o
+  reveal → ensaio da cerimônia via console do palco → resetar palco.
 
 ---
 

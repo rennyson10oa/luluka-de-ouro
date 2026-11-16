@@ -108,15 +108,28 @@ export default function VotePage() {
 
   const pct = progress.total > 0 ? Math.round((progress.selected / progress.total) * 100) : 0
 
-  // ---- Estado: cédula carregando (categories === null) ----
+  // ---- Estado: cédula carregando (categories === null) — esqueleto de carga:
+  // cards fantasmas no formato final evitam o "salto" de layout ao chegar.
   if (!categories) {
     return (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
         <Header />
-        <main className="flex-grow flex items-center justify-center pt-28">
-          <div className="flex flex-col items-center gap-3">
-            <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
+        <main className="flex-grow w-full max-w-7xl mx-auto px-6 lg:px-12 pt-28 pb-24">
+          <div className="flex items-center gap-3 mb-8">
+            <span className="material-symbols-outlined text-primary text-[24px] animate-spin">progress_activity</span>
             <span className="font-sans text-body-sm text-on-surface-variant">Abrindo a cédula oficial no cartório...</span>
+          </div>
+          <div className="space-y-10">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="space-y-4" aria-hidden="true">
+                <div className="h-8 w-64 rounded-lg bg-surface-container/60 animate-pulse" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((m) => (
+                    <div key={m} className="h-40 rounded-2xl bg-surface-container/40 animate-pulse" />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </main>
         <Footer />

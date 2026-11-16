@@ -1,0 +1,12 @@
+# Ignorado do contexto de build: nada de segredo, banco local ou artefato
+# pré-compilado entra na imagem (o dist é gerado DENTRO do build).
+app.db
+.env
+backend/.env
+uploads/
+node_modules/
+__pycache__/
+*.pyc
+frontend/dist/
+docs/
+dev.sh

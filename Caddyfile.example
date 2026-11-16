@@ -1,0 +1,14 @@
+# ------------------------------------------------------------------
+# Proxy de frente (opcional, recomendado) — TLS automático + SSE.
+#
+# O Caddy funciona SEM configuração especial para Server-Sent Events
+# (não faz buffer de respostas streaming). Se preferir Nginx, as linhas
+# equivalentes são:  proxy_buffering off;  proxy_cache off;
+# proxy_read_timeout 3600s;  proxy_set_header Host $host;
+#
+# Uso: copie para Caddyfile, troque o domínio, e rode:
+#   caddy run --config Caddyfile
+# ------------------------------------------------------------------
+gala.seudominio.com {
+    reverse_proxy localhost:8000
+}

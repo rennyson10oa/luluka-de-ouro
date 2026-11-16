@@ -280,6 +280,9 @@ export default function AdminPanel() {
   const [categoryForm, setCategoryForm] = useState(null)
 
   const [auditLog, setAuditLog] = useState([])
+  // Carga da ata: esqueleto enquanto o GET roda; o fetch só dispara com
+  // sessão soberana ativa (lazy: sem admin logado, nem chama o endpoint).
+  const [auditLoading, setAuditLoading] = useState(false)
 
   // Espelha o estado real no input: agenda preenchida ou vazio (null limpa).
   useEffect(() => {
@@ -308,10 +311,12 @@ export default function AdminPanel() {
   const loadAudit = useCallback(async () => {
     const token = admin?.token
     if (!token) return
+    setAuditLoading(true)
     const res = await apiFetch('/api/admin/audit', { token })
     if (res.ok && Array.isArray(res.data)) {
       setAuditLog(res.data)
     }
+    setAuditLoading(false)
   }, [admin?.token])
 
   useEffect(() => {
@@ -815,26 +820,34 @@ export default function AdminPanel() {
               />
 
               <ul className="flex flex-col gap-2">
-                {filteredLog.map((entry) => (
-                  <li key={entry.id} className="flex items-start justify-between gap-2 p-2.5 rounded-lg bg-surface-container-lowest/60 border border-outline-variant/30">
-                    <div className="min-w-0">
-                      <p className="font-sans font-semibold text-body-sm text-on-surface truncate">
-                        <span className="text-primary">{entry.actor}</span>
-                        <span className="text-outline"> • </span>
-                        <span>{AUDIT_LABELS[entry.action] || entry.action}</span>
-                      </p>
-                      {entry.detail && (
-                        <p className="font-sans text-[11px] text-on-surface-variant truncate">
-                          {entry.detail}
+                {auditLoading &&
+                  [1, 2, 3].map((n) => (
+                    <li key={`skeleton-${n}`} className="p-2.5 rounded-lg bg-surface-container-lowest/60 border border-outline-variant/30" aria-hidden="true">
+                      <div className="h-4 w-3/4 rounded bg-surface-container-high/70 animate-pulse" />
+                      <div className="h-3 w-1/2 rounded bg-surface-container-high/50 animate-pulse mt-1.5" />
+                    </li>
+                  ))}
+                {!auditLoading &&
+                  filteredLog.map((entry) => (
+                    <li key={entry.id} className="flex items-start justify-between gap-2 p-2.5 rounded-lg bg-surface-container-lowest/60 border border-outline-variant/30">
+                      <div className="min-w-0">
+                        <p className="font-sans font-semibold text-body-sm text-on-surface truncate">
+                          <span className="text-primary">{entry.actor}</span>
+                          <span className="text-outline"> • </span>
+                          <span>{AUDIT_LABELS[entry.action] || entry.action}</span>
                         </p>
-                      )}
-                    </div>
-                    <span className="shrink-0 font-sans text-[10px] text-outline text-right">
-                      {formatAuditTime(entry.created_at)}
-                    </span>
-                  </li>
-                ))}
-                {filteredLog.length === 0 && (
+                        {entry.detail && (
+                          <p className="font-sans text-[11px] text-on-surface-variant truncate">
+                            {entry.detail}
+                          </p>
+                        )}
+                      </div>
+                      <span className="shrink-0 font-sans text-[10px] text-outline text-right">
+                        {formatAuditTime(entry.created_at)}
+                      </span>
+                    </li>
+                  ))}
+                {!auditLoading && filteredLog.length === 0 && (
                   <li className="p-3 rounded-lg bg-surface-container-lowest/60 text-center font-sans text-body-sm text-outline">
                     {filter ? 'Nenhum registro encontrado nesse filtro.' : 'Nada registrado na ata ainda.'}
                   </li>

@@ -4,8 +4,30 @@ import Header from '../components/Header'
 import { Footer } from '../components/Footer'
 import PodiumBlock from '../components/results/PodiumBlock'
 import useGalaState from '../hooks/useGalaState'
+import useGalaEvents from '../hooks/useGalaEvents'
 import apiFetch from '../utils/api'
-import { RESULTS_META, GALLERY_STATS, FUN_STATS } from '../data/mockResults'
+
+/**
+ * RESULTS_COPY — copy de MARCA da galeria. NÃO é dado falso: títulos, selo e
+ * edição são textos editoriais fixos da página. A DATA da cerimônia, ao
+ * contrário, é dado REAL (derivada de reveal_at em GET /api/state) e é
+ * exibida separadamente no hero.
+ */
+const RESULTS_COPY = {
+  edition: '2025',
+  seal: 'Ata Notarial Homologada • Votação Encerrada',
+}
+
+/** Contadores reais: número vira "1.482"; ausência vira "—". */
+function formatCount(value) {
+  return typeof value === 'number' ? value.toLocaleString('pt-BR') : '—'
+}
+
+/** Data da gala a partir do reveal_at real; texto neutro quando não agendada. */
+function formatGalaDate(revealAt) {
+  if (!revealAt) return 'Data a definir pela comissão'
+  return revealAt.toLocaleString('pt-BR')
+}
 
 /**
  * Emoji de exibição por palavra-chave do título. A API /api/results não expõe
@@ -61,6 +83,9 @@ function mapResultToCategory(result) {
     }
   }
 
+  // 4º lugar (menção honrosa): hoje o GET /api/results devolve apenas os 3
+  // primeiros (podium[:3]); ainda assim o mapping é defensivo para quando/se o
+  // backend ampliar o recorte.
   const fourth = podium[3]
 
   return {
@@ -78,7 +103,7 @@ function mapResultToCategory(result) {
       honorable: fourth
         ? {
             memeName: fourth.username || 'Indicado',
-            votes: `${Number(fourth.votes) || 0} ${Number(fourth.votes) === 1 ? 'voto' : 'votos'}`,
+            votes: `${Number(fourth.votes) || 0} ${Number(fourth.votes) === 1 ? 'voto' : 'votos'} (${pct(fourth.votes)})`,
             detail: fourth.pitch || '',
           }
         : null,
@@ -87,22 +112,126 @@ function mapResultToCategory(result) {
 }
 
 /**
- * ResultsHero — selo notarial + título de gala + ações (PDF / Compartilhar).
+ * analyzeResults — extrai números reais por categoria a partir de
+ * GET /api/results. Cada item traz votos somados, margem 1º→2º (em pontos
+ * percentuais DENTRO da categoria) e o nome do vencedor.
  */
-function ResultsHero({ onDownload, onShare }) {
+function analyzeResults(results) {
+  const source = Array.isArray(results) ? results : []
+  return source.map((result) => {
+    const podium = Array.isArray(result.podium) ? result.podium : []
+    const total = podium.reduce((sum, item) => sum + (Number(item.votes) || 0), 0)
+    const firstVotes = Number(podium[0]?.votes) || 0
+    const secondVotes = Number(podium[1]?.votes) || 0
+    const pctOf = (votes) => (total > 0 ? (votes / total) * 100 : 0)
+    const leaderPct = pctOf(firstVotes)
+    const runnerUpPct = pctOf(secondVotes)
+
+    return {
+      title: result.title || 'Categoria sem título',
+      total,
+      hasRunnerUp: podium.length > 1,
+      winner: podium[0]?.username || 'Indicado',
+      leaderPct,
+      runnerUpPct,
+      margin: leaderPct - runnerUpPct,
+    }
+  })
+}
+
+/**
+ * buildFunStats — curiosidades 100% derivadas de dados reais
+ * (GET /api/results + contadores de /api/state/stream). Quando falta base de
+ * cálculo, o card anuncia a ausência ("—") em vez de inventar número.
+ */
+function buildFunStats(categories, totalVotos, totalUsers) {
+  const source = Array.isArray(categories) ? categories : []
+  const disputadas = source.filter((cat) => cat.hasRunnerUp && cat.total > 0)
+
+  const closest = disputadas.length
+    ? disputadas.reduce((best, cat) => (cat.margin < best.margin ? cat : best), disputadas[0])
+    : null
+  const biggest = disputadas.length
+    ? disputadas.reduce((best, cat) => (cat.margin > best.margin ? cat : best), disputadas[0])
+    : null
+
+  // Cada eleitor pode votar UMA vez por categoria (UniqueConstraint
+  // voter_id+category_id no banco). Logo, urnas possíveis = eleitores × categorias.
+  const possibleBallots =
+    typeof totalUsers === 'number' && source.length > 0 ? totalUsers * source.length : null
+  const participation =
+    possibleBallots && possibleBallots > 0 && typeof totalVotos === 'number'
+      ? Math.min(100, (totalVotos / possibleBallots) * 100)
+      : null
+
+  // Vencedor com MENOR consenso: o 1º lugar com o pior percentual — a vitória
+  // mais contestada da noite (distinto de "mais disputada", que mede margem).
+  const leastPopular = disputadas.length
+    ? disputadas.reduce((worst, cat) => (cat.leaderPct < worst.leaderPct ? cat : worst), disputadas[0])
+    : null
+
+  return [
+    {
+      icon: 'balance',
+      label: 'A Mais Disputada',
+      value: closest
+        ? `${closest.leaderPct.toFixed(1)}% vs ${closest.runnerUpPct.toFixed(1)}%`
+        : '—',
+      detail: closest
+        ? `${closest.title} • margem de ${closest.margin.toFixed(1)} p.p.`
+        : 'Aguardando 2º colocado apurado',
+    },
+    {
+      icon: 'waterfall_chart',
+      label: 'Maior Lavada Eleitoral',
+      value: biggest ? `${biggest.margin.toFixed(1)} p.p.` : '—',
+      detail: biggest
+        ? `${biggest.winner} • ${biggest.leaderPct.toFixed(1)}% vs ${biggest.runnerUpPct.toFixed(1)}%`
+        : 'Aguardando 2º colocado apurado',
+    },
+    {
+      icon: 'psychology',
+      label: 'Vitória Mais Contestada',
+      value: leastPopular ? `${leastPopular.leaderPct.toFixed(1)}%` : '—',
+      detail: leastPopular
+        ? `${leastPopular.winner} • só ${leastPopular.leaderPct.toFixed(1)}% acham que foi merecido`
+        : 'Aguardando apuração',
+    },
+    {
+      icon: 'pie_chart',
+      label: 'Participação nas Urnas',
+      value: participation !== null ? `${participation.toFixed(0)}%` : '—',
+      detail:
+        participation !== null
+          ? `${formatCount(totalVotos)} votos de ${formatCount(possibleBallots)} urnas possíveis`
+          : 'Sem dados suficientes para o cálculo',
+    },
+  ]
+}
+
+/**
+ * ResultsHero — selo notarial + título de gala + data real + ações (PDF / Compartilhar).
+ */
+function ResultsHero({ onDownload, onShare, galaDate }) {
   return (
     <section className="flex flex-col items-center text-center gap-4 pt-4">
       {/* Selo notarial homologado (verde suave) */}
       <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-sans font-semibold text-label-sm uppercase tracking-widest shadow-[0_0_16px_rgba(52,211,153,0.12)]">
         <span className="material-symbols-outlined text-[18px]">verified</span>
-        {RESULTS_META.seal}
+        {RESULTS_COPY.seal}
       </span>
 
       {/* Título de gala */}
       <h1 className="font-serif font-bold text-display-lg-mobile lg:text-display-lg leading-none tracking-tight max-w-4xl">
         Galeria Oficial de{' '}
-        <span className="gold-gradient-text">Resultados {RESULTS_META.edition}</span>
+        <span className="gold-gradient-text">Resultados {RESULTS_COPY.edition}</span>
       </h1>
+
+      {/* Data real da cerimônia (reveal_at) — neutra quando não agendada */}
+      <p className="inline-flex items-center gap-2 font-sans text-body-md text-on-surface-variant">
+        <span className="material-symbols-outlined text-secondary text-[18px]">event</span>
+        Data da Gala: <span className="font-medium text-on-surface">{galaDate}</span>
+      </p>
 
       {/* Ações: PDF (ghost) + Compartilhar (dourado) */}
       <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
@@ -131,13 +260,19 @@ function ResultsHero({ onDownload, onShare }) {
  * GalleryStatCard — card de métrica da galeria (padrão StatCard do AdminPanel,
  * recriado localmente para não acoplar a página ao painel).
  */
-function GalleryStatCard({ icon, label, value, detail }) {
+function GalleryStatCard({ icon, label, value, detail, live }) {
   return (
     <div className="bg-surface-container/90 backdrop-blur-md rounded-2xl p-5 shadow-[0_12px_32px_-4px_rgba(0,0,0,0.6),0_0_20px_0_rgba(212,175,55,0.06)] relative overflow-hidden">
       <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-3">
         <span className="font-sans font-bold text-label-sm text-secondary uppercase tracking-widest">{label}</span>
-        <span className="material-symbols-outlined text-primary text-[22px]">{icon}</span>
+        {live && (
+          <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-sans font-bold uppercase tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            ao vivo
+          </span>
+        )}
+        <span className={`material-symbols-outlined text-primary text-[22px] ${live ? '' : 'ml-auto'}`}>{icon}</span>
       </div>
       <p className="font-serif font-bold text-display-lg-mobile leading-none text-primary">{value}</p>
       <p className="font-sans text-body-sm text-on-surface-variant mt-2">{detail}</p>
@@ -204,7 +339,7 @@ function CategoryFilter({ categories, active, onChange }) {
 /**
  * BehindTheScenes — seção "Bastidores da Votação" com as curiosidades da apuração.
  */
-function BehindTheScenes() {
+function BehindTheScenes({ stats }) {
   return (
     <section className="bg-surface-container-lowest/60 rounded-3xl p-6 sm:p-10 flex flex-col gap-6">
       <div className="flex flex-col gap-1 text-center items-center">
@@ -215,8 +350,8 @@ function BehindTheScenes() {
           Estatísticas Curiosas da Apuração
         </h2>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-md">
-        {FUN_STATS.map((s) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
+        {stats.map((s) => (
           <FunStatCard key={s.label} {...s} />
         ))}
       </div>
@@ -264,10 +399,29 @@ function FinalCta({ onReplay }) {
  * Pública (sem guard de login). Fase 2 (ADR-0002): o bloqueio e os pódios vêm
  * do servidor — trancada quando a votação está aberta e o reveal ainda não
  * passou (espelha o 403 do GET /api/results); destrancada, busca /api/results.
+ *
+ * Fontes de dados da página (ZERO números inventados):
+ *   - GET /api/results → pódios, filtros e curiosidades derivadas;
+ *   - GET /api/state   → data da gala (reveal_at) + fallback dos contadores;
+ *   - stream SSE       → contadores ao vivo para usuários logados.
+ * Apenas a copy editorial (selo/edição) e a curiosidade cenográfica são fixas.
  */
 export default function ResultsPage() {
-  // Estado global da gala (fonte de verdade do bloqueio e do reveal).
-  const { votacaoAberta, revealAt, loading: loadingGala } = useGalaState()
+  // Estado global da gala (fonte de verdade do bloqueio, do reveal e fallback
+  // dos contadores quando o visitante NÃO está logado).
+  const {
+    votacaoAberta,
+    revealAt,
+    loading: loadingGala,
+    totalVotos: totalVotosState,
+    totalUsers: totalUsersState,
+  } = useGalaState()
+
+  // Stream SSE (ADR-0003): conectado apenas para usuários logados. Quando ativo,
+  // os contadores atualizam SEM reload; sem sessão, `totals` fica null e o
+  // fallback do /api/state assume.
+  const { totals, status: streamStatus } = useGalaEvents()
+
   const [now, setNow] = useState(() => Date.now())
   const [toast, setToast] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
@@ -313,6 +467,60 @@ export default function ResultsPage() {
     [results]
   )
 
+  // Análise numérica REAL por categoria (votos somados e margem 1º→2º).
+  const categoryAnalytics = useMemo(() => analyzeResults(results), [results])
+
+  // 4º destaque: categoria com o maior total de votos somados (nunca inventado).
+  const mostVotedCategory = useMemo(() => {
+    if (categoryAnalytics.length === 0) return null
+    const best = categoryAnalytics.reduce(
+      (acc, cat) => (cat.total > acc.total ? cat : acc),
+      categoryAnalytics[0]
+    )
+    return best.total > 0 ? best : null
+  }, [categoryAnalytics])
+
+  // Contadores ao vivo (stream) com fallback do /api/state (sem sessão).
+  const totalVotos = totals?.totalVotos ?? totalVotosState
+  const totalUsers = totals?.totalUsers ?? totalUsersState
+  const categoryCount = results ? results.length : null
+
+  // Cards de destaque: TODOS os valores vêm do servidor (ou são derivados dele).
+  const galleryStats = [
+    {
+      icon: 'how_to_vote',
+      label: 'Votos Computados',
+      value: formatCount(totalVotos),
+      detail: 'apuração em sigilo notarial',
+      live: streamStatus === 'conectado',
+    },
+    {
+      icon: 'groups',
+      label: 'Eleitores na Gala',
+      value: formatCount(totalUsers),
+      detail: 'chaves notariais ativas',
+      live: streamStatus === 'conectado',
+    },
+    {
+      icon: 'military_tech',
+      label: 'Categorias Disputadas',
+      value: formatCount(categoryCount),
+      detail: 'categorias homologadas pelo cartório',
+    },
+    {
+      icon: 'trending_up',
+      label: 'Categoria Mais Votada',
+      value: mostVotedCategory ? formatCount(mostVotedCategory.total) : '—',
+      detail: mostVotedCategory ? mostVotedCategory.title : 'Aguardando apuração',
+    },
+  ]
+
+  // Curiosidades: 100% derivadas de dados reais (sem cenográfico desde a
+  // remoção do "Horário de Pico" — decisão do dono).
+  const funStats = buildFunStats(categoryAnalytics, totalVotos, totalUsers)
+
+  const galaDate = formatGalaDate(revealAt)
+
   function showToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 3200)
@@ -324,7 +532,7 @@ export default function ResultsPage() {
     if (navigator.share) {
       navigator
         .share({
-          title: `Galeria Oficial de Resultados ${RESULTS_META.edition}`,
+          title: `Galeria Oficial de Resultados ${RESULTS_COPY.edition}`,
           text: 'Ata homologada! Confira os vencedores da gala do grupo.',
           url,
         })
@@ -423,11 +631,12 @@ export default function ResultsPage() {
           <ResultsHero
             onDownload={() => showToast('O cartório está encadernando o relatório — em breve')}
             onShare={handleShare}
+            galaDate={galaDate}
           />
 
-          {/* Métricas principais */}
+          {/* Métricas principais — todas reais (stream/estado/resultados) */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
-            {GALLERY_STATS.map((s) => (
+            {galleryStats.map((s) => (
               <GalleryStatCard key={s.label} {...s} />
             ))}
           </section>
@@ -453,6 +662,10 @@ export default function ResultsPage() {
                 <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
                 <span className="font-sans text-body-sm text-on-surface-variant">Apurando os votos no cartório...</span>
               </div>
+            ) : resultCategories.length === 0 ? (
+              <p className="text-center font-sans text-body-sm text-on-surface-variant">
+                O cartório ainda não homologou nenhuma categoria para esta edição.
+              </p>
             ) : filteredCategories.length === 0 ? (
               <p className="text-center font-sans text-body-sm text-on-surface-variant">
                 Nenhuma categoria encontrada para este filtro.
@@ -464,8 +677,8 @@ export default function ResultsPage() {
             )}
           </div>
 
-          {/* Bastidores da votação */}
-          <BehindTheScenes />
+          {/* Bastidores da votação — 3 curiosidades reais + 1 cenográfica assumida */}
+          <BehindTheScenes stats={funStats} />
 
           {/* CTA final */}
           <FinalCta onReplay={() => showToast('A gravação oficial da cerimônia chega com a sprint do reveal')} />

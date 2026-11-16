@@ -1,43 +1,11 @@
 /**
- * mockResults — dataset completo da Galeria de Resultados Oficiais (/resultados).
+ * mockResults — dataset de ENSAIO da cerimônia (/reveal), não da galeria.
  *
- * Dados de pós-cerimônia, independentes do MOCK_CATEGORIES do painel admin
- * (a galeria tem vida própria: pódios, menções honrosas e estatísticas da
- * apuração). Substituir por /api/results quando o backend FastAPI estiver pronto.
+ * A Galeria de Resultados (/resultados) passou a consumir APENAS dados reais
+ * (GET /api/results + /api/state + stream). Os antigos RESULTS_META,
+ * GALLERY_STATS e FUN_STATS foram removidos daqui por virarem órfãos/números
+ * inventados. RESULT_CATEGORIES permanece porque RevealPage usa no ensaio.
  */
-
-export const RESULTS_META = {
-  edition: '2025',
-  totalVotes: 1482,
-  seal: 'Ata Notarial Homologada • Votação Encerrada',
-}
-
-export const GALLERY_STATS = [
-  {
-    icon: 'how_to_vote',
-    label: 'Adesão Democrática',
-    value: '1.482',
-    detail: 'Votos auditados com reconhecimento facial de desocupados',
-  },
-  {
-    icon: 'verified_user',
-    label: 'Total de Urnas',
-    value: '100%',
-    detail: 'Seções de WhatsApp, Discord e Telegram apuradas',
-  },
-  {
-    icon: 'military_tech',
-    label: 'Troféus de Ouro',
-    value: '4',
-    detail: 'Estatuetas forjadas no fogo do sarcasmo implacável',
-  },
-  {
-    icon: 'health_and_safety',
-    label: 'Integridade Física',
-    value: '0',
-    detail: 'Admins feridos (apenas o orgulho de 14 membros destruído)',
-  },
-]
 
 export const RESULT_CATEGORIES = [
   {
@@ -210,23 +178,3 @@ export const RESULT_CATEGORIES = [
   },
 ]
 
-export const FUN_STATS = [
-  {
-    icon: 'schedule',
-    label: 'Horário de Pico',
-    value: 'Domingo • 23h48',
-    detail: 'Quando o grupo deveria estar dormindo',
-  },
-  {
-    icon: 'balance',
-    label: 'A Mais Disputada',
-    value: '41.3% vs 32.7%',
-    detail: 'Foto finish da retórica',
-  },
-  {
-    icon: 'waterfall_chart',
-    label: 'Maior Lavada Eleitoral',
-    value: 'Gabriel (Acre/Argentina)',
-    detail: 'Quase 50% dos votos num só mandato',
-  },
-]

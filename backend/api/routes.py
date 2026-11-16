@@ -305,7 +305,7 @@ def get_results(db: Session = Depends(get_db)):
         results.append({
             "category_id": cat.id,
             "title": cat.title,
-            "podium": podium[:3]
+            "podium": podium[:4]
         })
     return results
 

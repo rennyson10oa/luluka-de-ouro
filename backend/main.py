@@ -64,3 +64,36 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+# ---------------------------------------------------------------------------
+# Serviço do frontend estático (deploy: container único — ADR-0002).
+# Em desenvolvimento o Vite serve o front (:5173 com proxy /api); em
+# produção o FastAPI entrega o build (frontend/dist) com fallback SPA.
+# Nada aqui toca em /api/*: as rotas já registradas acima têm precedência.
+# ---------------------------------------------------------------------------
+import os
+
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+_DIST = os.environ.get("FRONTEND_DIST", "frontend/dist")
+
+if os.path.isdir(os.path.join(_DIST, "assets")):
+    app.mount(
+        "/assets",
+        StaticFiles(directory=os.path.join(_DIST, "assets")),
+        name="assets",
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str):
+        # Rota /api desconhecida NÃO vira index.html (evita máscara de erro).
+        if full_path.startswith("api/") or full_path == "api":
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=404, detail="Endpoint not found")
+        # Arquivo estático real (favicon etc.) → serve; senão → SPA (React Router).
+        candidato = os.path.normpath(os.path.join(_DIST, full_path))
+        if full_path and candidato.startswith(os.path.abspath(_DIST)) and os.path.isfile(candidato):
+            return FileResponse(candidato)
+        return FileResponse(os.path.join(_DIST, "index.html"), media_type="text/html")
