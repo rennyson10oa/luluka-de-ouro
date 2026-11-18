@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../hooks/useAuth'
 import useVoteNav from '../hooks/useVoteNav'
-import Trophy3DIcon from './Trophy3DIcon'
+import Trophy3DIcon from './Trophy3DIconLazy'
 import MobileMenu from './MobileMenu'
 
 // ---------------------------------------------------------------------------

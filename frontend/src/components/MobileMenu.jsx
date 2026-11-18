@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import useAuth from '../hooks/useAuth'
 import useVoteNav from '../hooks/useVoteNav'
-import Trophy3DIcon from './Trophy3DIcon'
+import Trophy3DIcon from './Trophy3DIconLazy'
 
 /**
  * MobileMenu — navegação em tela cheia para telas pequenas (< md).

@@ -154,3 +154,32 @@
 .animate-shake {
   animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
+
+/*
+ * Performance mobile: backdrop-filter é o maior custo de GPU da UI
+ * glassmorphism (73 usos na app). O custo do blur cresce com o raio —
+ * blur-xl (24px) em tela de 3x DPR torna o site inteiro lento, mesmo
+ * sem 3D. Em telas de toque/estreitas: reduzimos o raio para 6px
+ * (mesma estética, fração do custo) e desligamos animações que forçam
+ * re-blur do backdrop a cada frame.
+ */
+@media (pointer: coarse), (max-width: 767px) {
+  html, body {
+    /* transition: filter no body força camada de composição permanente */
+    transition: none;
+  }
+
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+
+  /* Opacity animando um card com backdrop-filter = re-filtro por frame */
+  .animate-pulse {
+    animation: none;
+  }
+
+  .menu-blur {
+    filter: blur(6px);
+  }
+}
