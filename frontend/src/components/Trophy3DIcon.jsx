@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { isLowPower } from '../utils/isLowPower';
 
 const GLB_PATH = '/assets/trophy-3d.glb';
 
@@ -122,11 +123,14 @@ export default function Trophy3DIcon({ width = 40, height = 40, zoom = 1, shiftY
   return (
     <div style={{ width, height }} className="bg-transparent" aria-label="Troféu 3D Prêmios do Grupo">
       <Canvas
-        dpr={[1, 1.5]}
+        // Mobile: dpr 1 e antialias off — este canvas é o menu mobile INTEIRO
+        // quando width/height vêm da MobileMenu (fullscreen), e sem isso o
+        // fill-rate nativo de 3x do celular tornava a gala injogável.
+        dpr={isLowPower ? [1, 1] : [1, 1.5]}
         camera={{ position: [0, 0, 2.4], fov: 40 }}
         gl={{
           alpha: true,
-          antialias: true,
+          antialias: !isLowPower,
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.2,
         }}
