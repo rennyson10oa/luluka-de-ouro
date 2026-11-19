@@ -19,6 +19,13 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env de produção}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Defina ADMIN_PASSWORD no .env de produção}
       # TLS/wss ficam por conta do proxy de frente (Caddy) — nada aqui.
+    # ⚠ ESTA era a peça que faltava: os volumes ABAIXO só existem se forem
+    # MONTADOS aqui. Sem estes mounts, o app.db vivia DENTRO do container
+    # e todo `docker compose up -d --build` recriava o banco do zero (o
+    # mkdir do Dockerfile nasce vazio). Bug real que apagou a gala em prod.
+    volumes:
+      - gala_data:/app/data
+      - gala_uploads:/app/uploads
 
 volumes:
   gala_data:
