@@ -475,16 +475,13 @@ export default function RevealPage() {
   // (política de autoplay), por isso o toggle é opt-in.
   const [somAtivo, setSomAtivo] = useState(isSoundEnabled())
 
-  // Orquestração: drumroll durante o SUSPENSE da cerimônia dirigida
-  // (qualquer fase exceto revelacao/encerramento) e prato no instante
+  // Orquestração: drumroll SOMENTE com a categoria em suspense no palco
+  // (fase 'categoria') — na abertura ("A gala começou") ainda não há o que
+  // revelar, e a plateia não merece cacla sem anúncio. Prato no instante
   // em que a fase vira 'revelacao'. Fora da dirigida, silêncio total.
   const suspenseRef = useRef(false)
   useEffect(() => {
-    const emSuspense =
-      dirigida &&
-      ceremony.phase !== null &&
-      ceremony.phase !== 'revelacao' &&
-      ceremony.phase !== 'encerramento'
+    const emSuspense = dirigida && ceremony.phase === 'categoria'
 
     if (somAtivo && emSuspense) startDrumroll()
     else stopDrumroll()

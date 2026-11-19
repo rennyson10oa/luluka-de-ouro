@@ -1,23 +1,33 @@
 /**
- * galaAudio — motor de som da cerimônia (Web Audio API, ZERO assets).
+ * galaAudio — motor de som da cerimônia.
  *
- * Filosofia do ProceduralEnv: nada de baixar mp3/HDR — o drumroll (cacla
- * de caixa com crescendo) e o "bum" da revelação são SINTETIZADOS em
- * runtime com ruído branco + filtros. Sem arquivo, sem CDN, sem licença.
+ * DRUMROLL = sample REAL (assets/drumroll.mp3, 6s, 183KB) da Mixkit
+ * (licença gratuita, sem atribuição). Tentativa anterior: síntese pura de
+ * caixa com ruído — soava estática, não bateria (timbre convincente de
+ * bateria é problema difícil; sample resolve). O sample é baixado só
+ * quando o som é usado pela 1ª vez e fica cacheado pelo navegador.
  *
- * Políticas de autoplay dos navegadores: o AudioContext só desperta num
- * GESTO do usuário — por isso o som é opt-in (botão na barra da cerimônia
- * dirigida) e a preferência persiste em localStorage. Se o som já estava
- * ativo numa visita anterior, o contexto acorda no 1º toque/tecla da página.
+ * TADA da revelação = sintetizado em runtime (prato + thump), que soa
+ * bem sem sample.
+ *
+ * Políticas de autoplay: o AudioContext só desperta num GESTO do usuário
+ * (o clique no toggle), por isso o som é opt-in e a preferência persiste
+ * em localStorage. Visita seguinte com som ativo: o contexto acorda no
+ * 1º toque/tecla da página.
  *
  * Uso: RevealPage orquestra startDrumroll/stopDrumroll/playRevealHit
  * conforme a fase da cerimônia; o toggle chama toggleSound().
  */
 
+const DRUMROLL_URL = '/assets/drumroll.mp3'
+
 let ctx = null
 let master = null
 let noiseBuffer = null
-let drumTimer = null
+// Sample decodificado (cache) + fonte/gain do loop em andamento.
+let drumBuffer = null
+let drumSource = null
+let drumGain = null
 
 const STORAGE_KEY = 'pg_som'
 
@@ -57,7 +67,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('keydown', wake)
 }
 
-/** 0.2s de ruído branco: a matéria-prima da caixa e do prato. */
+/** 0.2s de ruído branco: matéria-prima do prato do tada (sintetizado). */
 function makeNoise(ac) {
   const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.2), ac.sampleRate)
   const data = buf.getChannelData(0)
@@ -65,47 +75,62 @@ function makeNoise(ac) {
   return buf
 }
 
-/** Uma batida de caixa: rajada de ruído filtrada, decay curtíssimo. */
-function snare(when, gainValue) {
-  const src = ctx.createBufferSource()
-  src.buffer = noiseBuffer
-  const band = ctx.createBiquadFilter()
-  band.type = 'bandpass'
-  // Jitter de afinação: bateria real não é um sample loop congelado.
-  band.frequency.value = 1500 + Math.random() * 700
-  band.Q.value = 0.8
-  const g = ctx.createGain()
-  g.gain.setValueAtTime(gainValue, when)
-  g.gain.exponentialRampToValueAtTime(0.001, when + 0.09)
-  src.connect(band)
-  band.connect(g)
-  g.connect(master)
-  src.start(when)
-  src.stop(when + 0.1)
+/** Baixa e decodifica o sample uma única vez (cache na variável de módulo). */
+async function loadDrumroll() {
+  if (drumBuffer) return drumBuffer
+  const res = await fetch(DRUMROLL_URL)
+  if (!res.ok) throw new Error(`drumroll ${res.status}`)
+  drumBuffer = await ctx.decodeAudioData(await res.arrayBuffer())
+  return drumBuffer
 }
 
-/** Inicia a cacla contínua de drumroll (com crescendo suave). */
+/** Inicia o loop do sample com fade-in curto. */
 export function startDrumroll() {
   if (!isSoundEnabled()) return
   const ac = ensureContext()
-  if (!ac || drumTimer) return // já rolando
-  const t0 = ac.currentTime
-  drumTimer = setInterval(() => {
-    // Crescendo: cada batida um pouco mais forte conforme o suspense dura.
-    const elapsed = ac.currentTime - t0
-    const volume = Math.min(0.45, 0.1 + elapsed * 0.06)
-    snare(ac.currentTime, volume)
-  }, 55) // ~18 batidas/s: tensão de novela das oito
+  if (!ac || drumSource) return // já rolando
+  loadDrumroll()
+    .then((buf) => {
+      // Pode ter chegado stopDrumroll antes do download terminar.
+      if (drumSource || !isSoundEnabled()) return
+      const src = ac.createBufferSource()
+      src.buffer = buf
+      src.loop = true
+      const g = ac.createGain()
+      const t = ac.currentTime
+      g.gain.setValueAtTime(0.0001, t)
+      g.gain.exponentialRampToValueAtTime(0.9, t + 0.4) // entrada suave
+      src.connect(g)
+      g.connect(master)
+      src.start(t)
+      drumSource = src
+      drumGain = g
+    })
+    .catch(() => {
+      // Sample indisponível: cerimônia muda, gala continua.
+    })
 }
 
 export function stopDrumroll() {
-  if (drumTimer) {
-    clearInterval(drumTimer)
-    drumTimer = null
+  if (drumSource) {
+    const src = drumSource
+    const g = drumGain
+    const t = ctx.currentTime
+    try {
+      // Fade-out curtíssimo antes de parar: cortar seco tica o ouvido.
+      g.gain.cancelScheduledValues(t)
+      g.gain.setValueAtTime(g.gain.value, t)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15)
+      src.stop(t + 0.2)
+    } catch {
+      src.stop()
+    }
+    drumSource = null
+    drumGain = null
   }
 }
 
-/** Prato + thump grave: o "TADAM" do anúncio do vencedor. */
+/** Prato + thump grave: o "TADAM" do anúncio do vencedor (sintetizado). */
 export function playRevealHit() {
   if (!isSoundEnabled()) return
   const ac = ensureContext()
