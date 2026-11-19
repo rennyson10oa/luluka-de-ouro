@@ -1,46 +1,19 @@
-import { useState } from 'react'
-
 /**
  * RevealCard — card central da cerimônia com dois estágios:
  *
  * 1. SUSPENSE: "E o vencedor é..." com pontinhos pulsando + botão de revelar.
- * 2. REVELADO: vencedor em destaque (ouro), player de áudio falso, reações,
- *    pódio lateral (🥈🥉🎖️) e menção honrosa — fiel ao design do Stitch.
+ * 2. REVELADO: vencedor em destaque (ouro), reações, pódio lateral
+ *    (🥈🥉🎖️) e menção honrosa — fiel ao design do Stitch.
  *
  * A transição suspense→revelado dá um shake no card (animate-shake do index.css).
+ *
+ * NOTA DE ARQUITETURA: o antigo "player de áudio de evidência" (decorativo,
+ * herança do mock HTML) foi removido — decisão registrada: a gala é à base
+ * de texto (pitch/comentário); mídia de evidência foi REJEITADA por custo de
+ * infra/superfície de ataque sem caso de uso real. Se um dia uma categoria
+ * pedir prova, o caminho barato é LINK de evidência (URL no pitch), nunca
+ * upload de mídia.
  */
-
-/** Player de áudio DECORATIVO — barra de progresso animada via CSS, sem áudio real. */
-function FakeAudioPlayer({ audio }) {
-  const [playing, setPlaying] = useState(false)
-  // Defesa: pódio sem dados (categoria sem votos) não derruba a cerimônia.
-  if (!audio) return null
-  return (
-    <div className="flex items-center gap-3 p-3 rounded-xl bg-surface-container-lowest/70 border border-outline-variant/30">
-      <button
-        type="button"
-        onClick={() => setPlaying((p) => !p)}
-        title={playing ? 'Pausar evidência' : 'Tocar evidência'}
-        className="w-9 h-9 shrink-0 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_0_12px_rgba(212,175,55,0.4)] hover:brightness-110 transition-all"
-      >
-        <span className="material-symbols-outlined text-[20px]">
-          {playing ? 'pause' : 'play_arrow'}
-        </span>
-      </button>
-      <div className="flex-1 min-w-0">
-        <p className="font-sans font-semibold text-body-sm text-on-surface truncate">{audio.name}</p>
-        <p className="font-sans text-[11px] text-outline truncate">{audio.duration} • {audio.desc}</p>
-        {/* Barrinha de progresso falsa (anima via transition quando "tocando") */}
-        <div className="mt-1 h-1 rounded-full bg-surface-container-high overflow-hidden">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-primary-fixed to-primary-container transition-all ease-linear"
-            style={{ width: playing ? '100%' : '0%', transitionDuration: '14000ms' }}
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function RevealCard({ category, revealed, onReveal }) {
   const { podium } = category
@@ -105,7 +78,7 @@ export default function RevealCard({ category, revealed, onReveal }) {
           Votação Auditada pelo Cartório do Discord
         </span>
         <span className="px-3 py-1 rounded-full bg-primary text-on-primary font-sans font-bold text-label-sm uppercase tracking-widest">
-          🥇 OURO 2025
+          🥇 OURO 2026
         </span>
       </div>
 
@@ -134,9 +107,8 @@ export default function RevealCard({ category, revealed, onReveal }) {
           </div>
         </div>
 
-        {/* Evidência + reações */}
-        <div className="max-w-md mx-auto mt-6 flex flex-col gap-3">
-          <FakeAudioPlayer audio={first.audio} />
+        {/* Reações (texto real vindo do pódio) */}
+        <div className="max-w-md mx-auto mt-6 flex justify-center">
           <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-error-container/20 border border-error/30 text-error font-sans font-bold text-label-sm uppercase tracking-widest">
             <span className="material-symbols-outlined text-[16px]">sentiment_very_dissatisfied</span>
             {first.reactions}

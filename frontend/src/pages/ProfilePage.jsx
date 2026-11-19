@@ -4,7 +4,6 @@ import useAuth from '../hooks/useAuth'
 import Header from '../components/Header'
 import { Footer } from '../components/Footer'
 import ProfileHeader from '../components/profile/ProfileHeader'
-import HonorsCard from '../components/profile/HonorsCard'
 import AccountSettings from '../components/profile/AccountSettings'
 import MyCandidacies from '../components/profile/MyCandidacies'
 import ActivityTimeline from '../components/profile/ActivityTimeline'
@@ -67,7 +66,9 @@ export default function ProfilePage() {
           {/* ---- Coluna esquerda (fixa) ---- */}
           <aside className="xl:col-span-5 flex flex-col gap-6 xl:sticky xl:top-28">
             <ProfileHeader user={user} />
-            <HonorsCard />
+            {/* A timeline real (ata pessoal via /api/audit/me) ocupa o lugar
+                do antigo Histórico de Honrarias — que era mock cenográfico. */}
+            <ActivityTimeline />
 
             {/* Logout — vermelho suave */}
             <button
@@ -87,7 +88,6 @@ export default function ProfilePage() {
           <section className="xl:col-span-7 flex flex-col gap-6">
             <AccountSettings user={user} onToast={showToast} />
             <MyCandidacies onToast={showToast} />
-            <ActivityTimeline />
           </section>
         </div>
       </main>

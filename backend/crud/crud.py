@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from backend.models import models
 from backend.schemas import schemas
 from backend.core.security import get_password_hash
@@ -193,6 +193,10 @@ def create_category(db: Session, data: schemas.CategoryCreate):
         emoji=data.emoji,
         modo=data.modo,
         reveal_order=data.reveal_order,
+        # String vazia vira NULL: o frontend distingue "sem texto" (mostra
+        # fallback cenográfico) de texto preenchido.
+        description=data.description or None,
+        criteria=data.criteria or None,
     )
     db.add(db_category)
     db.commit()
@@ -202,9 +206,10 @@ def create_category(db: Session, data: schemas.CategoryCreate):
 
 def update_category(db: Session, db_category, data: schemas.CategoryUpdate):
     valores = data.model_dump(exclude_unset=True)
-    for campo in ("title", "emoji", "modo", "reveal_order"):
+    for campo in ("title", "emoji", "modo", "reveal_order", "description", "criteria"):
         if campo in valores:
-            setattr(db_category, campo, valores[campo])
+            # Texto vazio limpa o campo (=> None) em vez de gravar "".
+            setattr(db_category, campo, valores[campo] or None)
     db.commit()
     db.refresh(db_category)
     return db_category
@@ -371,6 +376,119 @@ def delete_nominee(db: Session, candidacy_id: int):
 
 
 # ---------------------------------------------------------------------------
+# Gerenciamento de usuários (admin)
+# ---------------------------------------------------------------------------
+def get_admin_users(db: Session):
+    """Lista usuários + os três contadores em UMA query (sem N+1).
+
+    Cada contador é uma subquery agregada por usuário; o outerjoin garante que
+    quem tem zero votos/candidaturas também apareça (coalesce em 0). O join com
+    duas FKs para `users` (voter_id e voted_user_id) é feito em subqueries
+    SEPARADAS justamente para não duplicar linhas do usuário.
+    """
+    candidacies_count = (
+        db.query(
+            models.Candidacy.user_id.label("user_id"),
+            func.count(models.Candidacy.id).label("total"),
+        )
+        .group_by(models.Candidacy.user_id)
+        .subquery()
+    )
+    votes_given_count = (
+        db.query(
+            models.Vote.voter_id.label("user_id"),
+            func.count(models.Vote.id).label("total"),
+        )
+        .group_by(models.Vote.voter_id)
+        .subquery()
+    )
+    votes_received_count = (
+        db.query(
+            models.Vote.voted_user_id.label("user_id"),
+            func.count(models.Vote.id).label("total"),
+        )
+        .group_by(models.Vote.voted_user_id)
+        .subquery()
+    )
+
+    return (
+        db.query(
+            models.User,
+            func.coalesce(candidacies_count.c.total, 0).label("candidacies_count"),
+            func.coalesce(votes_given_count.c.total, 0).label("votes_given_count"),
+            func.coalesce(votes_received_count.c.total, 0).label(
+                "votes_received_count"
+            ),
+        )
+        .outerjoin(candidacies_count, candidacies_count.c.user_id == models.User.id)
+        .outerjoin(votes_given_count, votes_given_count.c.user_id == models.User.id)
+        .outerjoin(
+            votes_received_count, votes_received_count.c.user_id == models.User.id
+        )
+        # Usuários antigos primeiro; o id desempata created_at no mesmo segundo.
+        .order_by(models.User.created_at.asc(), models.User.id.asc())
+        .all()
+    )
+
+
+def get_user_counters(db: Session, user_id: int) -> tuple[int, int, int]:
+    """Contadores de UM usuário (usado na resposta do PUT, sem varrer a lista)."""
+    candidacies = (
+        db.query(func.count(models.Candidacy.id))
+        .filter(models.Candidacy.user_id == user_id)
+        .scalar()
+        or 0
+    )
+    votes_given = (
+        db.query(func.count(models.Vote.id))
+        .filter(models.Vote.voter_id == user_id)
+        .scalar()
+        or 0
+    )
+    votes_received = (
+        db.query(func.count(models.Vote.id))
+        .filter(models.Vote.voted_user_id == user_id)
+        .scalar()
+        or 0
+    )
+    return int(candidacies), int(votes_given), int(votes_received)
+
+
+def delete_user_cascade(db: Session, user) -> None:
+    """Apaga o usuário e TUDO que aponta para ele, em cascata manual.
+
+    Por que manual: o schema SQLite não declara ON DELETE CASCADE (e a
+    checagem de FK pode estar desligada). Bulk deletes explícitos evitam
+    órfãos agora e violação de FK em bancos que a aplicam.
+
+    `expunge` antes do delete do User impede o ORM de tentar "desvincular"
+    relacionamentos carregados (ex.: UPDATE candidacies SET user_id = NULL),
+    o que violaria o NOT NULL das FKs.
+    """
+    user_id = user.id
+
+    # Votos DADOS e RECEBIDOS pelo usuário saem juntos: em ambos os casos o
+    # voto deixa de ter um dos lados válido.
+    db.query(models.Vote).filter(
+        or_(
+            models.Vote.voter_id == user_id,
+            models.Vote.voted_user_id == user_id,
+        )
+    ).delete(synchronize_session=False)
+
+    # Candidaturas do usuário (o pódio não pode apontar para quem não existe).
+    db.query(models.Candidacy).filter(
+        models.Candidacy.user_id == user_id
+    ).delete(synchronize_session=False)
+
+    db.expunge(user)
+    db.query(models.User).filter(models.User.id == user_id).delete(
+        synchronize_session=False
+    )
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
 # Ata notarial (audit log administrativo)
 # ---------------------------------------------------------------------------
 def record_audit(db: Session, actor: str, action: str, detail: str = ""):
@@ -396,6 +514,21 @@ def get_recent_audit(db: Session, limit: int = 30):
     return (
         db.query(models.AuditLog)
         # created_at tem precisão de segundo no SQLite: o id desempata.
+        .order_by(models.AuditLog.created_at.desc(), models.AuditLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_audit_for_actor(db: Session, actor: str, limit: int = 20):
+    """Atos de UM autor (o perfil do eleitor consome os dele próprio).
+
+    Ordem DECRESCENTE (mais recente primeiro — a timeline do perfil já
+    nasce pronta para exibir de cima para baixo).
+    """
+    return (
+        db.query(models.AuditLog)
+        .filter(models.AuditLog.actor == actor)
         .order_by(models.AuditLog.created_at.desc(), models.AuditLog.id.desc())
         .limit(limit)
         .all()

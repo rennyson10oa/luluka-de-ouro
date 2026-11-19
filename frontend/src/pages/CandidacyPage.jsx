@@ -125,7 +125,7 @@ export default function CandidacyPage() {
           <section className="flex flex-col items-center text-center max-w-4xl mx-auto">
             <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-surface-container-high/90 shadow-[0_0_16px_rgba(212,175,55,0.2)] mb-4 backdrop-blur-md">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
-              <span className="font-label-sm text-label-sm text-primary tracking-[0.2em] uppercase">Protocolo de Auto-Indicação • Temporada 2025</span>
+              <span className="font-label-sm text-label-sm text-primary tracking-[0.2em] uppercase">Protocolo de Auto-Indicação • Temporada 2026</span>
               <span className="material-symbols-outlined text-primary text-[14px]">verified</span>
             </div>
 
@@ -269,7 +269,7 @@ export default function CandidacyPage() {
           <section className="w-full flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-surface-container-lowest/60 backdrop-blur-sm text-outline font-sans text-body-sm">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-secondary text-[18px]">verified_user</span>
-              <span>Sessão Notarial Criptografada • Protocolo Oficial de Votações 2025</span>
+              <span>Sessão Notarial Criptografada • Protocolo Oficial de Votações 2026</span>
             </div>
             <div className="flex items-center gap-4 text-secondary font-medium">
               <a href="#" className="hover:text-primary transition-colors flex items-center gap-1">

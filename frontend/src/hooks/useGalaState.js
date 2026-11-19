@@ -13,7 +13,7 @@ import apiFetch from '../utils/api'
  *     trancar a cédula por causa de um flash de rede;
  *   - `isClosed` = reveal_at existe E o relógio local já passou dele;
  *   - o setTimeout abaixo dispara no exato momento do reveal para os
- *     consumidores reagirem sem exigir reload (mesmo comportamento do ensaio
+ *     consumidores reagirem sem exigir reload (mesmo comportamento do antigo
  *     da Task 11).
  *
  * Retorno: { votacaoAberta, revealAt, isClosed, totalVotos, totalUsers,

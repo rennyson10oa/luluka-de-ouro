@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MOCK_HONORS } from '../../data/mockProfile'
 import useCandidacies from '../../hooks/useCandidacies'
 import apiFetch from '../../utils/api'
 
@@ -32,6 +31,14 @@ export default function ProfileHeader({ user }) {
   const { usedCount, maxCandidacies } = useCandidacies()
   // Contagem de votos REAIS do eleitor (GET /api/votes/me, Fase 2).
   const [myVotesCount, setMyVotesCount] = useState(null)
+  // "Membro desde": registro real do cartório (users.created_at, exposto
+  // pelo /api/users/me). Mês/ano por extenso no fuso do navegador.
+  const memberSince = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString('pt-BR', {
+        month: 'long',
+        year: 'numeric',
+      })
+    : null
 
   /** Revoga o objectURL anterior e guarda o novo (evita vazamento de memória). */
   const replaceObjectUrl = useCallback((url) => {
@@ -233,7 +240,7 @@ export default function ProfileHeader({ user }) {
       <div className="grid grid-cols-3 gap-3 mt-5">
         <div className="bg-surface-container/70 backdrop-blur-md rounded-xl p-3 shadow-sm">
           <div className="flex items-center justify-between text-on-surface-variant mb-1">
-            <span className="text-label-sm uppercase tracking-wider">Votos 2025</span>
+            <span className="text-label-sm uppercase tracking-wider">Votos 2026</span>
             <span className="material-symbols-outlined text-[16px] text-primary">how_to_vote</span>
           </div>
           {/* Contagem REAL: GET /api/votes/me (cédulas do próprio eleitor). */}
@@ -254,11 +261,14 @@ export default function ProfileHeader({ user }) {
         </div>
         <div className="bg-surface-container/70 backdrop-blur-md rounded-xl p-3 shadow-sm">
           <div className="flex items-center justify-between text-on-surface-variant mb-1">
-            <span className="text-label-sm uppercase tracking-wider">Honrarias</span>
+            <span className="text-label-sm uppercase tracking-wider">Membro desde</span>
             <span className="material-symbols-outlined text-[16px] text-primary">military_tech</span>
           </div>
-          <div className="font-serif font-bold text-headline-sm text-on-surface">{String(MOCK_HONORS.length).padStart(2, '0')}</div>
-          <div className="text-label-sm text-on-surface-variant flex items-center gap-1 mt-0.5">condecorações</div>
+          {/* Registro real do cartório (users.created_at via /api/users/me). */}
+          <div className="font-serif font-bold text-body-lg text-on-surface">
+            {memberSince || '—'}
+          </div>
+          <div className="text-label-sm text-on-surface-variant flex items-center gap-1 mt-0.5">registro na gala</div>
         </div>
       </div>
     </div>

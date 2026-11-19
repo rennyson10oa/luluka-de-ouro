@@ -185,6 +185,8 @@ def get_categories(db: Session = Depends(get_db)):
             "emoji": cat.emoji,
             "modo": cat.modo,
             "reveal_order": cat.reveal_order,
+            "description": cat.description,
+            "criteria": cat.criteria,
             "candidacies": []
         }
         for cand in cat.candidacies:
@@ -216,6 +218,20 @@ def create_candidacy(candidacy: schemas.CandidacyCreate, db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Already a candidate in this category")
         
     created = crud.create_candidacy(db, candidacy, user_id=current_user.id)
+
+    # Ato do eleitor na ata (consumida pelo perfil dele em /audit/me).
+    categoria = (
+        db.query(models.Category)
+        .filter(models.Category.id == candidacy.category_id)
+        .first()
+    )
+    crud.record_audit(
+        db,
+        current_user.username,
+        "candidatura_criada",
+        f"candidatura em '{categoria.title}'" if categoria else "candidatura criada",
+    )
+
     return {
         "id": created.id,
         "pitch": created.pitch,
@@ -254,6 +270,22 @@ async def cast_vote(vote: schemas.VoteCreate, db: Session = Depends(get_db), cur
         
     crud.cast_vote(db, vote, voter_id=current_user.id)
 
+    # O ato do eleitor entra na ata (o perfil dele consome via /audit/me).
+    # O VOTO em si é sigiloso no pódio, mas o AUTOR do voto é o próprio
+    # eleitor — ele já sabe em quem votou; a ata é o diário dele.
+    votado = crud.get_user(db, vote.voted_user_id)
+    categoria = (
+        db.query(models.Category).filter(models.Category.id == vote.category_id).first()
+    )
+    crud.record_audit(
+        db,
+        current_user.username,
+        "voto_registrado",
+        f"voto em @{votado.username} na categoria '{categoria.title}'"
+        if votado and categoria
+        else "voto registrado",
+    )
+
     # Persistiu → difunde. Apenas o TOTAL: o voto individual é sigiloso.
     await events.hub.broadcast(
         "votes.counter", {"total": crud.get_total_votes(db)}
@@ -289,7 +321,7 @@ def my_vote_stamp(db: Session = Depends(get_db), current_user: models.User = Dep
         for v in sorted(votes, key=lambda x: x.category_id)
     )
     digest = hashlib.sha256(f"luluka-gala:{current_user.id}:{cesta}".encode()).hexdigest().upper()
-    return {"stamp": f"#GALA-2025-{digest[:6]}", "ballot_size": len(votes)}
+    return {"stamp": f"#GALA-2026-{digest[:6]}", "ballot_size": len(votes)}
 
 @router.get("/results", response_model=list[schemas.CategoryResultResponse])
 def get_results(db: Session = Depends(get_db)):
@@ -442,6 +474,9 @@ async def stream_events(
     )
 
     fila = events.hub.connect()
+    # Quem entrou soma na contagem exibida no chat (o próprio recém-chegado
+    # recebe o presence.update dele pelo fanout acima).
+    events.hub.broadcast_presence()
     return StreamingResponse(
         events.event_stream(fila, start_seq),
         media_type="text/event-stream",
@@ -735,6 +770,8 @@ def _category_payload(cat) -> dict:
         "emoji": cat.emoji,
         "modo": cat.modo,
         "reveal_order": cat.reveal_order,
+        "description": cat.description,
+        "criteria": cat.criteria,
         "candidacies": [
             {
                 "id": cand.id,
@@ -903,6 +940,137 @@ async def admin_delete_nominee(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ---------------------------------------------------------------------------
+# Gerenciamento de usuários (admin)
+# ---------------------------------------------------------------------------
+def _admin_user_payload(
+    user: models.User,
+    candidacies_count: int = 0,
+    votes_given_count: int = 0,
+    votes_received_count: int = 0,
+) -> dict:
+    """Serializa o usuário no formato do painel (caminho de avatar cru)."""
+    return {
+        "id": user.id,
+        "username": user.username,
+        "vulgo": user.vulgo,
+        "is_guest": bool(user.is_guest),
+        # Caminho RELATIVO ("uploads/xxx.png"): o painel exibe iniciais; não há
+        # rota admin de arquivo de avatar (decisão de escopo, sem rota extra).
+        "avatar": user.avatar,
+        "created_at": user.created_at,
+        "candidacies_count": int(candidacies_count),
+        "votes_given_count": int(votes_given_count),
+        "votes_received_count": int(votes_received_count),
+    }
+
+
+@router.get("/admin/users", response_model=list[schemas.AdminUserResponse])
+def admin_list_users(
+    db: Session = Depends(get_db),
+    admin: bool = Depends(deps.verify_admin_token),
+):
+    # UMA query com subqueries agregadas (sem N+1 por usuário).
+    rows = crud.get_admin_users(db)
+    return [
+        _admin_user_payload(
+            user, candidacies_count, votes_given_count, votes_received_count
+        )
+        for user, candidacies_count, votes_given_count, votes_received_count in rows
+    ]
+
+
+@router.put("/admin/users/{user_id}", response_model=schemas.AdminUserResponse)
+async def admin_update_user(
+    user_id: int,
+    payload: schemas.AdminUserUpdate,
+    db: Session = Depends(get_db),
+    admin: bool = Depends(deps.verify_admin_token),
+):
+    user = crud.get_user(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # `exclude_unset` distingue campo OMITIDO (não toca) de vulgo "" (limpa).
+    valores = payload.model_dump(exclude_unset=True)
+    username_anterior = user.username
+
+    if "username" in valores:
+        novo_username = (valores["username"] or "").strip()
+        if not novo_username:
+            raise HTTPException(
+                status_code=400, detail="Username não pode ser vazio"
+            )
+        # Unicidade ignorando o PRÓPRIO usuário (reenviar o mesmo username vale).
+        conflito = (
+            db.query(models.User)
+            .filter(
+                models.User.username == novo_username,
+                models.User.id != user_id,
+            )
+            .first()
+        )
+        if conflito is not None:
+            raise HTTPException(
+                status_code=409, detail="Já existe um usuário com esse nome"
+            )
+        user.username = novo_username
+
+    if "vulgo" in valores:
+        novo_vulgo = valores["vulgo"]
+        if isinstance(novo_vulgo, str):
+            novo_vulgo = novo_vulgo.strip()
+        # String vazia (ou None explícito) limpa o apelido.
+        user.vulgo = novo_vulgo or None
+
+    db.commit()
+    db.refresh(user)
+
+    if user.username != username_anterior:
+        detalhe = f"{username_anterior} → {user.username}"
+    else:
+        detalhe = user.username
+    crud.record_audit(db, "admin", "usuario_editado", detalhe)
+
+    candidacies_count, votes_given_count, votes_received_count = (
+        crud.get_user_counters(db, user.id)
+    )
+    return _admin_user_payload(
+        user, candidacies_count, votes_given_count, votes_received_count
+    )
+
+
+@router.delete("/admin/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: bool = Depends(deps.verify_admin_token),
+):
+    user = crud.get_user(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Captura os dados ANTES do delete: a ata precisa sobreviver ao usuário.
+    username = user.username
+    avatar = user.avatar
+
+    crud.delete_user_cascade(db, user)
+
+    crud.record_audit(db, "admin", "usuario_excluido", username)
+
+    # Apaga o arquivo de avatar do disco (mesmo padrão de DELETE /users/me/avatar).
+    # Silencioso de propósito: um arquivo ausente já é o estado desejado.
+    if avatar:
+        caminho = os.path.join(app_settings.UPLOAD_DIR, os.path.basename(avatar))
+        try:
+            if os.path.isfile(caminho):
+                os.remove(caminho)
+        except OSError:
+            pass
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/admin/audit", response_model=list[schemas.AuditLogResponse])
 def admin_audit_log(
     limit: int = Query(30, ge=1, le=100),
@@ -912,3 +1080,17 @@ def admin_audit_log(
     # O CRUD devolve DESC (mais recentes primeiro); a ata é exposta em ordem
     # CRONOLÓGICA para o painel exibir o histórico do mais antigo ao mais novo.
     return list(reversed(crud.get_recent_audit(db, limit=limit)))
+
+
+@router.get("/audit/me", response_model=list[schemas.AuditLogResponse])
+def my_audit_trail(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    """Atividade do PRÓPRIO eleitor na assembleia (atos que ELE praticou).
+
+    Alimenta a timeline do perfil (/perfil). Não expõe ações alheias: o
+    filtro é pelo actor == username do token. Admin continua com a ata
+    completa em /admin/audit.
+    """
+    return crud.get_audit_for_actor(db, current_user.username, limit=20)

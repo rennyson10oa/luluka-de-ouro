@@ -10,7 +10,13 @@ import useGalaEvents from '../hooks/useGalaEvents'
 import useAuth from '../hooks/useAuth'
 import useAdminAuth from '../hooks/useAdminAuth'
 import { apiFetch } from '../utils/api'
-import { RESULT_CATEGORIES } from '../data/mockResults'
+import {
+  isSoundEnabled,
+  toggleSound,
+  startDrumroll,
+  stopDrumroll,
+  playRevealHit,
+} from '../utils/galaAudio'
 
 /** Formato "04d 18h 41m 20s" para a contagem da cerimônia. */
 function formatCountdown(diff) {
@@ -40,8 +46,6 @@ function mapRealResult(real) {
           votes: `${x.votes} Votos`,
           pct: pctOf(x),
           icon: 'sentiment_very_satisfied',
-          // Player de áudio permanece decorativo (decisão do dono: cosméticos mock).
-          audio: { name: 'Evidência oficial da gala', duration: '0:00', desc: 'áudio em produção' },
           reactions: 'reações em ata',
           detail: x.pitch || '',
         }
@@ -51,8 +55,6 @@ function mapRealResult(real) {
           votes: '0 Votos',
           pct: '0%',
           icon: 'hourglass_empty',
-          // Audio decorativo precisa existir até no fallback (o player é o quebra-pausa).
-          audio: { name: 'Apuração em andamento', duration: '0:00', desc: 'evidência pendente' },
           reactions: '—',
           detail: 'pódio em apuração',
         }
@@ -263,7 +265,7 @@ function ConsolePalco({ onClose }) {
           </p>
         )}
 
-        {/* Reset do palco: volta a "não iniciada" — ensaio geral quantas vezes quiser.
+        {/* Reset do palco: volta a "não iniciada" — passe geral quantas vezes quiser.
             NÃO apaga votos: é só posição de palco (decisão registrada no backend). */}
         {phase && (
           <button
@@ -455,17 +457,47 @@ export default function RevealPage() {
   const { admin } = useAdminAuth()
   const { user } = useAuth()
   const [consoleOpen, setConsoleOpen] = useState(false)
-  const [rehearsal, setRehearsal] = useState(false) // modo ensaio: destrava sem tocar no backend
   const [now, setNow] = useState(() => Date.now())
+  // Ref do confete: compartilhado entre a cerimônia dirigida e a pré-gala.
+  const confettiRef = useRef(null)
 
   // MÁQUINA DE ESTADOS do /reveal — precedência NESTA ordem:
   //   1. DIRIGIDA — o servidor tem fase ativa (phase !== null);
-  //   2. ENSAIO   — sem fase no servidor e o ensaio foi destravado;
-  //   3. TRANCADA — sem fase e reveal_at ainda no futuro;
-  //   4. PRÉ-CERIMÔNIA — sem fase e reveal_at nulo/passado (tela neutra).
+  //   2. TRANCADA — sem fase e reveal_at ainda no futuro;
+  //   3. PRÉ-CERIMÔNIA — sem fase e reveal_at nulo/passado (tela neutra).
+  // (O antigo estado de ENSAIO — máquina local com 4 categorias mockadas —
+  //  foi removido: o palco só existe de verdade, dirigido pelo admin.)
   const dirigida = ceremony.phase !== null
-  const ensaio = !dirigida && rehearsal
   const isLocked = !dirigida && Boolean(revealAt && revealAt.getTime() > now)
+
+  // ---- Som da gala (drumroll + tada) ----
+  // Preferência persistida; o AudioContext só desperta num gesto do usuário
+  // (política de autoplay), por isso o toggle é opt-in.
+  const [somAtivo, setSomAtivo] = useState(isSoundEnabled())
+
+  // Orquestração: drumroll durante o SUSPENSE da cerimônia dirigida
+  // (qualquer fase exceto revelacao/encerramento) e prato no instante
+  // em que a fase vira 'revelacao'. Fora da dirigida, silêncio total.
+  const suspenseRef = useRef(false)
+  useEffect(() => {
+    const emSuspense =
+      dirigida &&
+      ceremony.phase !== null &&
+      ceremony.phase !== 'revelacao' &&
+      ceremony.phase !== 'encerramento'
+
+    if (somAtivo && emSuspense) startDrumroll()
+    else stopDrumroll()
+
+    // Transição suspense → revelação: o TADAM (mesmo padrão do confete).
+    if (suspenseRef.current && !emSuspense && ceremony.phase === 'revelacao' && somAtivo) {
+      playRevealHit()
+    }
+    suspenseRef.current = emSuspense
+  }, [dirigida, ceremony.phase, somAtivo])
+
+  // Saindo da página: a cacla não pode continuar rolando sem plateia.
+  useEffect(() => () => stopDrumroll(), [])
 
   // Resync ativo no mount: se a cerimônia JÁ está em andamento no servidor,
   // a página abre direto no modo dirigido — sem esperar o próximo evento do
@@ -476,84 +508,12 @@ export default function RevealPage() {
 
   const countdown = formatCountdown(Math.max(0, (revealAt?.getTime() ?? now) - now))
 
-  // Máquina de estágios da cerimônia LOCAL — usada SÓ no estado de ENSAIO.
-  const [catIndex, setCatIndex] = useState(0)
-  const [revealed, setRevealed] = useState(false)
-  const [autoplay, setAutoplay] = useState(false)
-
-  const confettiRef = useRef(null)
-
-  const total = RESULT_CATEGORIES.length
-  const category = RESULT_CATEGORIES[catIndex]
-  const isFinale = catIndex === total - 1 && revealed
-  const revealedCount = catIndex + (revealed ? 1 : 0)
-  const progressPct = Math.round((revealedCount / total) * 100)
-
   // Contagem regressiva: tica por segundo enquanto há reveal agendado.
   useEffect(() => {
     if (!revealAt) return undefined
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [revealAt])
-
-  // Confete no momento do reveal LOCAL
-  function revealCurrent() {
-    setRevealed(true)
-    confettiRef.current?.fire(140)
-  }
-
-  function goNext() {
-    if (catIndex < total - 1) {
-      setCatIndex((i) => i + 1)
-      setRevealed(false)
-    }
-  }
-  function goPrev() {
-    if (catIndex > 0) {
-      setCatIndex((i) => i - 1)
-      setRevealed(false)
-    }
-  }
-
-  // Autoplay — exclusivo do ENSAIO (a pré-cerimônia não tem máquina local).
-  useEffect(() => {
-    if (!autoplay || !ensaio) return undefined
-    const delay = revealed ? 4000 : 3000
-    const id = setTimeout(() => {
-      if (!revealed) {
-        revealCurrent()
-      } else if (catIndex < total - 1) {
-        goNext()
-      } else {
-        setAutoplay(false)
-      }
-    }, delay)
-    return () => clearTimeout(id)
-  }, [autoplay, revealed, catIndex, ensaio]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Finale do ensaio: chuva dupla de confete.
-  useEffect(() => {
-    if (!ensaio || !isFinale) return undefined
-    confettiRef.current?.fire(200)
-    const t = setTimeout(() => confettiRef.current?.fire(160), 900)
-    return () => clearTimeout(t)
-  }, [ensaio, isFinale])
-
-  // Teclado — exclusivo do ENSAIO (na dirigida, quem comanda é o admin).
-  useEffect(() => {
-    if (!ensaio) return undefined
-    function onKey(e) {
-      if (e.code === 'Space' || e.code === 'ArrowRight') {
-        e.preventDefault()
-        if (!revealed) revealCurrent()
-        else goNext()
-      } else if (e.code === 'ArrowLeft') {
-        goPrev()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [ensaio, revealed, catIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------- ESTADO 1: CERIMÔNIA DIRIGIDA ----------------------
   // O conteúdo de cada ramo vira uma variável; um wrapper único no fim da
@@ -576,168 +536,30 @@ export default function RevealPage() {
               <span className="material-symbols-outlined text-[14px]">theater_comedy</span>
               Mestre de cerimônias: Admin
             </span>
+            {/* Som opt-in (política de autoplay exige gesto): drumroll no
+                suspense e tada no reveal, tudo sintetizado (galaAudio.js). */}
+            <button
+              type="button"
+              onClick={() => setSomAtivo(toggleSound())}
+              title={somAtivo ? 'Desativar o som da gala' : 'Ativar o som da gala (drumroll no suspense, tada na revelação)'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border font-sans font-bold text-label-sm uppercase tracking-widest transition-all ${
+                somAtivo
+                  ? 'bg-primary text-on-primary border-primary shadow-[0_0_14px_rgba(212,175,55,0.4)]'
+                  : 'bg-surface-container-high/80 text-outline border-outline-variant/50 hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                {somAtivo ? 'volume_up' : 'volume_off'}
+              </span>
+              Som
+            </button>
           </div>
         </div>
         <CerimoniaDirigida confettiRef={confettiRef} />
         <Footer />
       </div>
     )
-  } else if (ensaio) {
-    content = (
-    <div className="min-h-screen flex flex-col bg-surface text-on-surface">
-      <ConfettiCanvas ref={confettiRef} />
-      <Header />
-
-      {/* Barra de controles (sticky sob o header) */}
-      <div className="sticky top-20 z-40 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-outline-variant/30">
-        <div className="max-w-7xl mx-auto px-6 lg:px-12 py-3 flex flex-wrap items-center justify-between gap-3">
-          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-error-container/20 border border-error/40 text-error font-sans font-bold text-label-sm uppercase tracking-widest">
-            <span className="w-2 h-2 rounded-full bg-error animate-pulse" />
-            REVEAL AO VIVO
-          </span>
-
-          {/* Toggle autoplay */}
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <span className="font-sans text-body-sm text-on-surface-variant">Autoplay</span>
-            <span className="relative inline-flex w-10 h-5 rounded-full bg-surface-container-high transition-colors peer">
-              <input
-                type="checkbox"
-                checked={autoplay}
-                onChange={(e) => setAutoplay(e.target.checked)}
-                className="peer sr-only"
-              />
-              <span className="absolute inset-0 rounded-full bg-surface-container-high peer-checked:bg-primary transition-colors" />
-              <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-on-surface-variant peer-checked:bg-on-primary peer-checked:translate-x-5 transition-transform" />
-            </span>
-          </label>
-
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline-flex items-center gap-1 text-outline font-sans text-body-sm">
-              <span className="material-symbols-outlined text-[16px]">keyboard</span>
-              Espaço: Próximo
-            </span>
-            {!revealed && (
-              <button
-                type="button"
-                onClick={revealCurrent}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface font-sans font-semibold text-body-sm transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">fast_forward</span>
-                Pular Suspense
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <main className="flex-grow w-full max-w-7xl mx-auto px-6 lg:px-12 pt-8 pb-24">
-        {/* Progresso da cerimônia */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-8">
-          <span className="font-sans font-bold text-label-md text-secondary uppercase tracking-widest">
-            {progressPct}% das Vergonhas Reveladas
-          </span>
-          <div className="flex items-center gap-2">
-            {RESULT_CATEGORIES.map((cat, i) => {
-              const done = i < catIndex || (i === catIndex && revealed)
-              const current = i === catIndex
-              return (
-                <span
-                  key={cat.id}
-                  title={cat.title}
-                  className={`w-8 h-2 rounded-full transition-all duration-300 ${
-                    done
-                      ? 'bg-emerald-500'
-                      : current
-                        ? 'bg-primary animate-pulse'
-                        : 'bg-surface-container-high'
-                  }`}
-                />
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Card da cerimônia + chat */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          <div className="lg:col-span-8">
-            <RevealCard key={catIndex} category={category} revealed={revealed} onReveal={revealCurrent} />
-
-            {/* Finale */}
-            {isFinale && (
-              <div className="mt-6 text-center bg-surface-container-low/80 backdrop-blur-xl rounded-2xl p-6 border border-primary/30">
-                <h2 className="font-serif font-bold text-headline-sm text-primary mb-3">
-                  Fim da Cerimônia! 🏆
-                </h2>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <Link
-                    to="/resultados"
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-bold text-title-md shadow-[0_0_24px_rgba(212,175,55,0.4)] hover:brightness-110 transition-all"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">photo_library</span>
-                    Ver Galeria de Resultados
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => { setCatIndex(0); setRevealed(false) }}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-sans font-semibold text-title-md transition-all"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">replay</span>
-                    Rever do Começo
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Chat real (stream) — liberado quando a categoria está revelada */}
-          <aside className="lg:col-span-4">
-            <RevealChat active={revealed} />
-          </aside>
-        </div>
-
-        {/* Navegação inferior */}
-        <div className="flex items-center justify-between mt-10">
-          <button
-            type="button"
-            onClick={goPrev}
-            disabled={catIndex === 0}
-            className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-sans font-semibold text-body-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-            Anterior
-          </button>
-
-          {catIndex < total - 1 ? (
-            <button
-              type="button"
-              onClick={goNext}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-sans font-semibold text-body-md transition-all"
-            >
-              Próxima: {RESULT_CATEGORIES[catIndex + 1].navLabel}
-              <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-            </button>
-          ) : (
-            <span className="font-sans text-body-sm text-outline">Última categoria da gala</span>
-          )}
-        </div>
-      </main>
-
-      {/* Botão flutuante de confete */}
-      <button
-        type="button"
-        onClick={() => confettiRef.current?.fire(100)}
-        title="Jogar Confete"
-        className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-bold text-body-md shadow-[0_0_24px_rgba(212,175,55,0.45)] hover:brightness-110 hover:scale-105 active:scale-95 transition-all"
-      >
-        <span className="material-symbols-outlined text-[20px]">celebration</span>
-        Jogar Confete!
-      </button>
-
-      <Footer />
-    </div>
-    )
-
-  // ---------------------- ESTADO 3: TRANCADA ----------------------
+  // ---------------------- ESTADO 2: TRANCADA ----------------------
   } else if (isLocked) {
     content = (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
@@ -755,7 +577,7 @@ export default function RevealPage() {
               Os sobrescritos estão lacrados no cartório. Volte quando o relógio zerar.
             </p>
             <p className="font-serif font-bold text-[36px] text-on-surface tabular-nums mb-8">{countdown}</p>
-            <div className="flex items-center justify-center gap-space-sm">
+            <div className="flex items-center justify-center">
               <Link
                 to="/"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-sans font-semibold text-title-md transition-all"
@@ -763,13 +585,6 @@ export default function RevealPage() {
                 <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                 Voltar ao Início
               </Link>
-              <button
-                type="button"
-                onClick={() => setRehearsal(true)}
-                className="text-outline hover:text-secondary font-sans text-body-sm underline underline-offset-4 transition-colors"
-              >
-                entrar em modo ensaio
-              </button>
             </div>
           </div>
         </main>
@@ -777,17 +592,21 @@ export default function RevealPage() {
       </div>
     )
 
-  // ---------------------- ESTADO 4: PRÉ-CERIMÔNIA ----------------------
-  // phase nula + reveal_at nulo/passado: tela neutra de espera. NÃO é o mock
-  // de 4 categorias (o mock só existe no ensaio) e não há máquina local aqui.
+  // ---------------------- ESTADO 3: PRÉ-CERIMÔNIA ----------------------
+  // phase nula + reveal_at nulo/passado: tela neutra de espera ("A Gala Está
+  // Reunida") com o chat já liberado para a conversa de espera.
   } else {
     content = (
       <div className="min-h-screen flex flex-col bg-surface text-on-surface">
         <ConfettiCanvas ref={confettiRef} />
         <Header />
 
-        <main className="flex-grow w-full max-w-7xl mx-auto px-6 lg:px-12 pt-8 pb-24">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* main em flex-col + my-auto no grid: o bloco card+chat fica
+            CENTRALIZADO no espaço sob o header (o `items-start` antigo +
+            pt-8 deixava tudo espremido no topo com um vazio embaixo).
+            my-auto colapsa para 0 em telas baixas — sem cortar conteúdo. */}
+        <main className="flex-grow w-full max-w-7xl mx-auto px-6 lg:px-12 pt-8 pb-24 flex flex-col">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center my-auto">
             <div className="lg:col-span-8">
               <div className="relative bg-surface-container-low/80 backdrop-blur-2xl rounded-3xl p-8 sm:p-12 shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_45px_rgba(212,175,55,0.15)] text-center">
                 <span className="material-symbols-outlined text-primary text-[64px]" aria-hidden="true">
@@ -802,8 +621,10 @@ export default function RevealPage() {
               </div>
             </div>
 
-            {/* Pré-gala: o chat já está liberado para a conversa de espera. */}
-            <aside className="lg:col-span-4">
+            {/* Pré-gala: o chat já está liberado para a conversa de espera.
+                mt empurra o chat para baixo (o card tem menos altura que os
+                480px do chat — sem isso o chat encosta na borda superior). */}
+            <aside className="lg:col-span-4 lg:mt-12">
               <RevealChat active currentUser={user} />
             </aside>
           </div>

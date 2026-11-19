@@ -66,7 +66,7 @@ export default function RegisterPage() {
         <div className="flex justify-center -mb-3 relative z-20">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-highest/90 backdrop-blur-md shadow-[0_4px_16px_rgba(0,0,0,0.6)]">
             <span className="material-symbols-outlined text-primary text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-            <span className="font-sans font-bold text-label-sm text-secondary uppercase tracking-widest">Protocolo Eleitoral 2025</span>
+            <span className="font-sans font-bold text-label-sm text-secondary uppercase tracking-widest">Protocolo Eleitoral 2026</span>
           </div>
         </div>
 
@@ -252,7 +252,7 @@ export default function RegisterPage() {
           <div className="mt-6 pt-4 text-center">
             <p className="font-sans text-body-sm text-outline flex items-center justify-center gap-1.5 select-none">
               <span className="material-symbols-outlined text-[15px] text-secondary">lock_open_right</span>
-              <span>senha fraca é permitida, aqui é zoeira</span>
+              <span>senha fraca é permitida, aqui é zoeira garai</span>
             </p>
           </div>
         </div>
@@ -263,7 +263,7 @@ export default function RegisterPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
             <span>SESSÃO CRIPTOGRAFADA</span>
           </span>
-          <span>ACADEMIA DO GRUPO • 2025</span>
+          <span>ACADEMIA DO GRUPO • 2026</span>
         </div>
       </div>
       </div>

@@ -15,8 +15,17 @@ import apiFetch, { extractErrorDetail } from '../../utils/api'
  *     useGalaState (GET /api/state, buscado no mount);
  *   - CRUD de categorias e indicados em /api/admin/categories e
  *     /api/admin/nominees (Bearer do admin);
+ *   - GERENCIAMENTO DE USUÁRIOS em /api/admin/users (listar, editar
+ *     username/vulgo e apagar em cascata votos + candidaturas);
  *   - agendamento do reveal em PUT /api/admin/settings;
  *   - ata notarial real em GET /api/admin/audit.
+ *
+ * Layout (pedido do dono): guias abaixo dos KPIs — "Gestão da Gala"
+ * (categorias + urna secreta/ata + zona de perigo) e "Usuários" (registro
+ * civil). Criar/editar categoria e editar usuário abrem MODAIS de overlay
+ * (ModalShell) sobre a tela inteira — e os modais moram FORA de qualquer
+ * ancestral com backdrop-filter: backdrop-filter cria containing block
+ * para position:fixed, o modal ficaria preso dentro da seção.
  *
  * "Zerar Tudo" continua limpando apenas as chaves pg_* locais — os votos e as
  * candidaturas REAIS permanecem no banco do servidor.
@@ -38,9 +47,17 @@ const AUDIT_LABELS = {
   categoria_excluida: 'Categoria excluída',
   indicado_adicionado: 'Indicado adicionado',
   indicado_removido: 'Indicado removido',
+  usuario_editado: 'Usuário editado',
+  usuario_excluido: 'Usuário excluído',
   agendamento_alterado: 'Agendamento alterado',
   cerimonia_comando: 'Comando de cerimônia',
 }
+
+// Registros por página na ata. Paginação CLIENT-SIDE de propósito: a ata
+// inteira já é carregada para o "X de Y" e o filtro buscar em tudo; fatiar
+// aqui mantém o filtro instantâneo sem endpoint novo (?limit&offset só se
+// a ata um dia crescer a ponto de pesar no GET).
+const AUDIT_PAGE_SIZE = 10
 
 /** Formata o created_at da ata (ISO do FastAPI) no fuso do navegador. */
 function formatAuditTime(raw) {
@@ -52,6 +69,25 @@ function formatAuditTime(raw) {
 /** Contadores: número vira "1.482"; ausência vira "—". */
 function formatCount(value) {
   return typeof value === 'number' ? value.toLocaleString('pt-BR') : '—'
+}
+
+/** Data curta de criação do usuário (apenas dia/mês/ano). */
+function formatShortDate(raw) {
+  if (!raw) return '—'
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR')
+}
+
+/**
+ * Iniciais para o círculo dourado.
+ *
+ * O avatar do backend é um CAMINHO RELATIVO em disco ("uploads/xxx.png") e não
+ * existe rota (nem pública nem de admin) para servi-lo — criar uma rota extra
+ * está fora do escopo deste painel. Por isso exibimos iniciais em vez de <img>.
+ */
+function initialsOf(username) {
+  const limpo = (username || '?').trim()
+  return limpo.slice(0, 2).toUpperCase() || '?'
 }
 
 function StatCard({ icon, label, value, detail, live }) {
@@ -251,10 +287,95 @@ function CategoryCard({ category, onEdit, onDelete, onAddNominee, onRemoveNomine
   )
 }
 
+/** Linha de usuário: identidade, contadores reais e ações de editar/apagar. */
+function UserRow({ user, onEdit, onDelete }) {
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-xl bg-surface-container-lowest/60 border border-outline-variant/30">
+      <span className="shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-primary-fixed/30 to-primary-container/30 border border-primary/40 text-primary font-serif font-bold text-sm flex items-center justify-center">
+        {initialsOf(user.username)}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-sans font-bold text-body-md text-on-surface truncate">
+            @{user.username}
+          </p>
+          {user.vulgo && (
+            <span className="font-sans text-body-sm text-on-surface-variant truncate">
+              · {user.vulgo}
+            </span>
+          )}
+          {user.is_guest && (
+            <span className="px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant/40 text-outline text-[10px] font-mono uppercase tracking-wider">
+              Convidado
+            </span>
+          )}
+        </div>
+        <p className="font-sans text-[11px] text-outline mt-0.5">
+          {user.candidacies_count} cand. · {user.votes_given_count} votos dados ·{' '}
+          {user.votes_received_count} recebidos · desde {formatShortDate(user.created_at)}
+        </p>
+      </div>
+
+      <div className="shrink-0 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onEdit(user)}
+          title="Editar usuário"
+          className="w-8 h-8 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-primary flex items-center justify-center transition-colors"
+        >
+          <span className="material-symbols-outlined text-[16px]">edit</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(user)}
+          title="Apagar usuário para sempre"
+          className="w-8 h-8 rounded-lg bg-surface-container-high hover:bg-error-container/40 text-on-surface-variant hover:text-error flex items-center justify-center transition-colors"
+        >
+          <span className="material-symbols-outlined text-[16px]">delete</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * ModalShell — casca de modal DE VERDADE: overlay fixo cobrindo a tela
+ * inteira (fundo escurecido + blur), card centralizado e destacado.
+ * Usado por edição de categoria, edição de usuário e confirmação
+ * destrutiva — antes disso o formulário de edição vivia EMBUTIDO na
+ * própria seção, o que confundia "formulário" com "conteúdo do painel".
+ */
+function ModalShell({ children, maxWidth = 'max-w-lg', danger = false }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div
+        className={`w-full ${maxWidth} bg-surface-container-low rounded-2xl p-6 shadow-2xl ${
+          danger ? 'border border-error/30' : 'border border-primary/30'
+        }`}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/** Botões de guia do painel (padrão visual da nav do Header). */
+function tabClasses(active) {
+  if (active) {
+    return 'inline-flex items-center gap-2 px-4 py-2 text-body-sm font-medium rounded-full text-primary-fixed bg-primary-container/15 border border-primary-container/30 shadow-sm'
+  }
+  return 'inline-flex items-center gap-2 px-4 py-2 text-body-sm font-medium rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50 border border-transparent'
+}
+
 export default function AdminPanel() {
   const { admin, logoutAdmin } = useAdminAuth()
   const { logout } = useAuth()
   const navigate = useNavigate()
+
+  // Guia ativa do painel: "gestao" (categorias/urna/perigo) | "usuarios".
+  // O dono pediu guias em vez de seções empilhadas — uma tela por vez.
+  const [tab, setTab] = useState('gestao')
 
   // Fonte de verdade do reveal + contadores (GET /api/state no mount).
   const {
@@ -283,6 +404,20 @@ export default function AdminPanel() {
   // Carga da ata: esqueleto enquanto o GET roda; o fetch só dispara com
   // sessão soberana ativa (lazy: sem admin logado, nem chama o endpoint).
   const [auditLoading, setAuditLoading] = useState(false)
+  // Página atual da ata (0-based). Volta a 0 quando o filtro muda.
+  const [auditPage, setAuditPage] = useState(0)
+
+  // ---- Gerenciamento de usuários (GET/PUT/DELETE /api/admin/users) ----
+  const [users, setUsers] = useState([])
+  const [usersLoading, setUsersLoading] = useState(true)
+  const [usersError, setUsersError] = useState('')
+  const [userSearch, setUserSearch] = useState('')
+  // Formulário inline de edição (null = fechado).
+  const [userEdit, setUserEdit] = useState(null)
+  // Alvo da confirmação destrutiva (null = modal fechado).
+  const [userDelete, setUserDelete] = useState(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [userSaving, setUserSaving] = useState(false)
 
   // Espelha o estado real no input: agenda preenchida ou vazio (null limpa).
   useEffect(() => {
@@ -319,6 +454,25 @@ export default function AdminPanel() {
     setAuditLoading(false)
   }, [admin?.token])
 
+  /** Lista REAL de usuários + contadores (GET /api/admin/users, Bearer). */
+  const loadUsers = useCallback(async () => {
+    const token = admin?.token
+    if (!token) {
+      // Sem sessão soberana não há o que buscar; evita 401 desnecessário.
+      setUsersLoading(false)
+      return
+    }
+    setUsersLoading(true)
+    const res = await apiFetch('/api/admin/users', { token })
+    if (res.ok && Array.isArray(res.data)) {
+      setUsers(res.data)
+      setUsersError('')
+    } else {
+      setUsersError('Falha ao sincronizar os usuários com o cartório.')
+    }
+    setUsersLoading(false)
+  }, [admin?.token])
+
   useEffect(() => {
     loadCategories()
   }, [loadCategories])
@@ -326,6 +480,10 @@ export default function AdminPanel() {
   useEffect(() => {
     loadAudit()
   }, [loadAudit])
+
+  useEffect(() => {
+    loadUsers()
+  }, [loadUsers])
 
   // Comandos de cerimônia vivem no /reveal; quando o stream avisa um passo,
   // a ata do painel se atualiza sozinha (se o admin estiver logado como user).
@@ -420,6 +578,8 @@ export default function AdminPanel() {
       emoji: '',
       modo: 'candidatos',
       reveal_order: maxOrder + 1,
+      description: '',
+      criteria: '',
     })
   }
 
@@ -430,6 +590,8 @@ export default function AdminPanel() {
       emoji: category.emoji || '',
       modo: category.modo || 'candidatos',
       reveal_order: category.reveal_order,
+      description: category.description || '',
+      criteria: category.criteria || '',
     })
   }
 
@@ -446,6 +608,8 @@ export default function AdminPanel() {
       emoji: categoryForm.emoji.trim(),
       modo: categoryForm.modo,
       reveal_order: Number(categoryForm.reveal_order),
+      description: categoryForm.description.trim(),
+      criteria: categoryForm.criteria.trim(),
     }
     if (!payload.title) {
       showToast('Informe o título da categoria.')
@@ -554,6 +718,79 @@ export default function AdminPanel() {
     }
   }
 
+  // ---- Gerenciamento de usuários ----
+  function openEditUser(user) {
+    // vulgo '' (não null) deixa o input controlado; o backend converte vazio
+    // em null ao salvar.
+    setUserEdit({ id: user.id, username: user.username, vulgo: user.vulgo || '' })
+  }
+
+  async function submitUserEdit(e) {
+    e.preventDefault()
+    const token = admin?.token
+    if (!token || !userEdit) {
+      showToast('Sessão admin sem token: entre novamente para editar.')
+      return
+    }
+    const username = userEdit.username.trim()
+    if (!username) {
+      showToast('Informe o username.')
+      return
+    }
+
+    setUserSaving(true)
+    const res = await apiFetch(`/api/admin/users/${userEdit.id}`, {
+      method: 'PUT',
+      // vulgo vai SEMPRE: string vazia limpa o apelido no servidor.
+      body: { username, vulgo: userEdit.vulgo.trim() },
+      token,
+    })
+    setUserSaving(false)
+
+    if (res.ok) {
+      showToast('Usuário atualizado no cartório')
+      setUserEdit(null)
+      await loadUsers()
+      await loadAudit()
+      // O username pode ter mudado: os totais/estado público continuam válidos,
+      // mas o refresh mantém o painel coerente com o servidor.
+      refresh()
+    } else {
+      // 409 "Já existe um usuário com esse nome" cai aqui.
+      showToast(extractErrorDetail(res.data, 'Falha ao salvar o usuário.'))
+    }
+  }
+
+  function askDeleteUser(user) {
+    setDeleteConfirmText('')
+    setUserDelete(user)
+  }
+
+  async function confirmDeleteUser() {
+    const token = admin?.token
+    if (!token || !userDelete) return
+    // Trava extra no cliente: o botão já fica desabilitado, mas não custa.
+    if (deleteConfirmText !== userDelete.username) return
+
+    setUserSaving(true)
+    const res = await apiFetch(`/api/admin/users/${userDelete.id}`, {
+      method: 'DELETE',
+      token,
+    })
+    setUserSaving(false)
+
+    if (res.ok) {
+      showToast('Usuário apagado para sempre')
+      setUserDelete(null)
+      setDeleteConfirmText('')
+      await loadUsers()
+      await loadAudit()
+      refresh()
+    } else {
+      showToast(extractErrorDetail(res.data, 'Falha ao apagar o usuário.'))
+    }
+  }
+
   function wipeAll() {
     const confirmed = window.confirm(
       'Isso apagará os dados LOCAIS da gala (sessão e agendamento no navegador). Votos e candidaturas reais continuam no servidor. Continuar?'
@@ -586,6 +823,32 @@ export default function AdminPanel() {
         .includes(q)
     })
   }, [auditLog, filter])
+
+  // Paginação da ata: fatia da página atual + total de páginas.
+  const auditPageCount = Math.max(1, Math.ceil(filteredLog.length / AUDIT_PAGE_SIZE))
+  const pagedLog = useMemo(
+    () => filteredLog.slice(auditPage * AUDIT_PAGE_SIZE, (auditPage + 1) * AUDIT_PAGE_SIZE),
+    [filteredLog, auditPage]
+  )
+
+  // Filtro novo = busca nova: recomeça da primeira página. E se a ata
+  // encolher (reload/filtro apertado), o clamp evita página fantasma.
+  useEffect(() => {
+    setAuditPage(0)
+  }, [filter])
+
+  useEffect(() => {
+    if (auditPage > auditPageCount - 1) setAuditPage(auditPageCount - 1)
+  }, [auditPage, auditPageCount])
+
+  // Busca de usuários (client-side): filtra por username OU vulgo.
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase()
+    if (!q) return users
+    return users.filter((u) =>
+      `${u.username || ''} ${u.vulgo || ''}`.toLowerCase().includes(q)
+    )
+  }, [users, userSearch])
 
   return (
     <div className="flex-grow w-full relative z-10">
@@ -666,7 +929,35 @@ export default function AdminPanel() {
           ))}
         </section>
 
-        {/* ---- Corpo: categorias + audit log ---- */}
+        {/* ---- Guias do painel (abaixo dos KPIs): uma seção por vez ---- */}
+        <div className="mt-8 flex items-center gap-2 border-b border-outline-variant/30 pb-3" role="tablist" aria-label="Seções do painel">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'gestao'}
+            onClick={() => setTab('gestao')}
+            className={tabClasses(tab === 'gestao')}
+          >
+            <span className="material-symbols-outlined text-[18px]">how_to_vote</span>
+            Gestão da Gala
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'usuarios'}
+            onClick={() => setTab('usuarios')}
+            className={tabClasses(tab === 'usuarios')}
+          >
+            <span className="material-symbols-outlined text-[18px]">group</span>
+            Usuários
+            <span className="px-1.5 py-0.5 rounded bg-surface-container-high border border-outline-variant/40 text-outline text-[10px] font-mono">
+              {users.length}
+            </span>
+          </button>
+        </div>
+
+        {/* ---- Guia "Gestão da Gala": categorias + urna/perigo ---- */}
+        {tab === 'gestao' && (
         <div className="mt-10 grid grid-cols-1 xl:grid-cols-12 gap-8">
           {/* Categorias */}
           <section className="xl:col-span-7 flex flex-col gap-4">
@@ -688,86 +979,8 @@ export default function AdminPanel() {
               </button>
             </div>
 
-            {/* Formulário inline de criação/edição */}
-            {categoryForm && (
-              <form
-                onSubmit={submitCategory}
-                className="bg-surface-container-low/80 backdrop-blur-xl rounded-2xl p-5 shadow-lg border border-primary/20 flex flex-col gap-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary text-[20px]">category</span>
-                    <span className="font-sans font-bold text-label-md text-secondary uppercase tracking-wider">
-                      {categoryForm.id ? 'Editar categoria' : 'Nova categoria'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setCategoryForm(null)}
-                    title="Fechar formulário"
-                    className="w-7 h-7 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">close</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                  <label className="sm:col-span-6 flex flex-col gap-1">
-                    <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Título</span>
-                    <input
-                      type="text"
-                      value={categoryForm.title}
-                      onChange={(e) => setCategoryForm((f) => ({ ...f, title: e.target.value }))}
-                      maxLength={80}
-                      placeholder="Melhor Meme do Ano"
-                      className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
-                    />
-                  </label>
-                  <label className="sm:col-span-2 flex flex-col gap-1">
-                    <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Emoji</span>
-                    <input
-                      type="text"
-                      value={categoryForm.emoji}
-                      onChange={(e) => setCategoryForm((f) => ({ ...f, emoji: e.target.value }))}
-                      maxLength={8}
-                      placeholder="🏆"
-                      className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
-                    />
-                  </label>
-                  <label className="sm:col-span-2 flex flex-col gap-1">
-                    <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Modo</span>
-                    <select
-                      value={categoryForm.modo}
-                      onChange={(e) => setCategoryForm((f) => ({ ...f, modo: e.target.value }))}
-                      className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
-                    >
-                      <option value="candidatos">Candidatos</option>
-                      <option value="aberta">Aberta</option>
-                    </select>
-                  </label>
-                  <label className="sm:col-span-2 flex flex-col gap-1">
-                    <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Ordem</span>
-                    <input
-                      type="number"
-                      min="1"
-                      value={categoryForm.reveal_order}
-                      onChange={(e) => setCategoryForm((f) => ({ ...f, reveal_order: e.target.value }))}
-                      className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
-                    />
-                  </label>
-                </div>
-
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-lg bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-semibold text-body-md shadow-[0_0_16px_rgba(212,175,55,0.3)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">save</span>
-                    {categoryForm.id ? 'Salvar Alterações' : 'Instituir Categoria'}
-                  </button>
-                </div>
-              </form>
-            )}
+            {/* Formulário de criar/editar virou MODAL (renderizado no fim do
+                <main>, fora de qualquer ancestral com backdrop-filter). */}
 
             {categoriesLoading && (
               <p className="p-3 rounded-xl bg-surface-container-lowest/60 text-center font-sans text-body-sm text-outline animate-pulse">
@@ -828,7 +1041,7 @@ export default function AdminPanel() {
                     </li>
                   ))}
                 {!auditLoading &&
-                  filteredLog.map((entry) => (
+                  pagedLog.map((entry) => (
                     <li key={entry.id} className="flex items-start justify-between gap-2 p-2.5 rounded-lg bg-surface-container-lowest/60 border border-outline-variant/30">
                       <div className="min-w-0">
                         <p className="font-sans font-semibold text-body-sm text-on-surface truncate">
@@ -854,9 +1067,46 @@ export default function AdminPanel() {
                 )}
               </ul>
 
-              <p className="mt-3 text-center font-sans text-[11px] text-outline">
-                Mostrando {filteredLog.length} de {auditLog.length} registros na ata
-              </p>
+              {/* Rodapé: resumo + paginação (10 registros por página) */}
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="font-sans text-[11px] text-outline">
+                  Mostrando{' '}
+                  {filteredLog.length === 0
+                    ? 0
+                    : auditPage * AUDIT_PAGE_SIZE + 1}
+                  –
+                  {Math.min((auditPage + 1) * AUDIT_PAGE_SIZE, filteredLog.length)} de{' '}
+                  {filteredLog.length} registros na ata
+                </p>
+
+                {auditPageCount > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAuditPage((p) => Math.max(0, p - 1))}
+                      disabled={auditPage === 0}
+                      title="Página anterior"
+                      aria-label="Página anterior da ata"
+                      className="w-7 h-7 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+                    </button>
+                    <span className="font-sans text-[11px] text-on-surface-variant font-mono tabular-nums">
+                      {auditPage + 1} / {auditPageCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAuditPage((p) => Math.min(auditPageCount - 1, p + 1))}
+                      disabled={auditPage >= auditPageCount - 1}
+                      title="Próxima página"
+                      aria-label="Próxima página da ata"
+                      className="w-7 h-7 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </section>
 
             {/* Danger zone */}
@@ -880,6 +1130,307 @@ export default function AdminPanel() {
             </section>
           </aside>
         </div>
+        )}
+
+        {/* ---- Guia "Usuários" (Registro Civil) ---- */}
+        {tab === 'usuarios' && (
+        <section className="mt-10 bg-surface-container-low/80 backdrop-blur-xl rounded-2xl p-5 shadow-lg">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[20px]">group</span>
+              <h2 className="font-serif font-bold text-title-lg text-on-surface">Usuários</h2>
+              <span className="px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant/40 text-outline text-[10px] font-mono uppercase tracking-wider">
+                {users.length} {users.length === 1 ? 'conta' : 'contas'}
+              </span>
+            </div>
+            <span className="font-sans text-[10px] text-outline font-mono">REGISTRO CIVIL</span>
+          </div>
+
+          <input
+            type="text"
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            placeholder="Buscar por username ou vulgo..."
+            className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all mb-3"
+          />
+
+          {/* Edição de usuário: o MODAL é renderizado no fim do <main> —
+              NÃO pode viver dentro de um ancestral com backdrop-filter, ou
+              o position:fixed perde o viewport como referência (CSS spec:
+              backdrop-filter cria containing block para descendentes fixed). */}
+
+          {usersLoading && (
+            <p className="p-3 rounded-xl bg-surface-container-lowest/60 text-center font-sans text-body-sm text-outline animate-pulse">
+              Carregando usuários...
+            </p>
+          )}
+
+          {!usersLoading && usersError && (
+            <p className="p-3 rounded-xl bg-error-container/20 border border-error/30 text-center font-sans text-body-sm text-error">
+              {usersError}
+            </p>
+          )}
+
+          {!usersLoading && !usersError && filteredUsers.length === 0 && (
+            <p className="p-3 rounded-xl bg-surface-container-lowest/60 border border-outline-variant/30 text-center font-sans text-body-sm text-outline">
+              {users.length === 0
+                ? 'Nenhuma conta registrada no cartório ainda.'
+                : 'Nenhum usuário corresponde a essa busca.'}
+            </p>
+          )}
+
+          {!usersLoading && !usersError && filteredUsers.length > 0 && (
+            <div className="flex flex-col gap-2.5">
+              {filteredUsers.map((user) => (
+                <UserRow
+                  key={user.id}
+                  user={user}
+                  onEdit={openEditUser}
+                  onDelete={askDeleteUser}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+        )}
+
+        {/* ---- Modais de overlay (fora de qualquer ancestral com
+             backdrop-filter: fixed precisa do viewport como referência) ---- */}
+
+        {/* Edição de categoria (criar/editar) */}
+        {categoryForm && (
+          <ModalShell>
+            <form onSubmit={submitCategory} className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-[20px]">category</span>
+                  <span className="font-sans font-bold text-label-md text-secondary uppercase tracking-wider">
+                    {categoryForm.id ? 'Editar categoria' : 'Nova categoria'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCategoryForm(null)}
+                  title="Fechar formulário"
+                  className="w-7 h-7 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                <label className="sm:col-span-6 flex flex-col gap-1">
+                  <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Título</span>
+                  <input
+                    type="text"
+                    value={categoryForm.title}
+                    onChange={(e) => setCategoryForm((f) => ({ ...f, title: e.target.value }))}
+                    maxLength={80}
+                    placeholder="Melhor Meme do Ano"
+                    className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
+                  />
+                </label>
+                <label className="sm:col-span-2 flex flex-col gap-1">
+                  <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Emoji</span>
+                  <input
+                    type="text"
+                    value={categoryForm.emoji}
+                    onChange={(e) => setCategoryForm((f) => ({ ...f, emoji: e.target.value }))}
+                    maxLength={8}
+                    placeholder="🏆"
+                    className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
+                  />
+                </label>
+                <label className="sm:col-span-2 flex flex-col gap-1">
+                  <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Modo</span>
+                  <select
+                    value={categoryForm.modo}
+                    onChange={(e) => setCategoryForm((f) => ({ ...f, modo: e.target.value }))}
+                    className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
+                  >
+                    <option value="candidatos">Candidatos</option>
+                    <option value="aberta">Aberta</option>
+                  </select>
+                </label>
+                <label className="sm:col-span-2 flex flex-col gap-1">
+                  <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Ordem</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={categoryForm.reveal_order}
+                    onChange={(e) => setCategoryForm((f) => ({ ...f, reveal_order: e.target.value }))}
+                    className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="font-sans text-[11px] text-outline uppercase tracking-wider">
+                    Descrição oficial
+                  </span>
+                  <textarea
+                    value={categoryForm.description}
+                    onChange={(e) => setCategoryForm((f) => ({ ...f, description: e.target.value }))}
+                    maxLength={500}
+                    rows={4}
+                    placeholder="O texto que aparece no card da landing (deixe vazio para usar a copy cenográfica padrão)."
+                    className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all resize-none"
+                  />
+                  <span className="font-sans text-[10px] text-outline text-right">
+                    {categoryForm.description.length}/500
+                  </span>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="font-sans text-[11px] text-outline uppercase tracking-wider">
+                    Critério (texto auxiliar)
+                  </span>
+                  <textarea
+                    value={categoryForm.criteria}
+                    onChange={(e) => setCategoryForm((f) => ({ ...f, criteria: e.target.value }))}
+                    maxLength={200}
+                    rows={4}
+                    placeholder="Textinho do rodapé do card (ex.: 'Critério: destruição retórica')."
+                    className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all resize-none"
+                  />
+                  <span className="font-sans text-[10px] text-outline text-right">
+                    {categoryForm.criteria.length}/200
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-semibold text-body-md shadow-[0_0_16px_rgba(212,175,55,0.3)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-[18px]">save</span>
+                  {categoryForm.id ? 'Salvar Alterações' : 'Instituir Categoria'}
+                </button>
+              </div>
+            </form>
+          </ModalShell>
+        )}
+
+        {/* Edição de usuário */}
+        {userEdit && (
+          <ModalShell>
+            <form onSubmit={submitUserEdit} className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-[20px]">manage_accounts</span>
+                  <span className="font-sans font-bold text-label-md text-secondary uppercase tracking-wider">
+                    Editar usuário
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUserEdit(null)}
+                  title="Fechar formulário"
+                  className="w-7 h-7 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Username</span>
+                  <input
+                    type="text"
+                    value={userEdit.username}
+                    onChange={(e) => setUserEdit((f) => ({ ...f, username: e.target.value }))}
+                    maxLength={30}
+                    placeholder="username"
+                    className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="font-sans text-[11px] text-outline uppercase tracking-wider">Vulgo (opcional)</span>
+                  <input
+                    type="text"
+                    value={userEdit.vulgo}
+                    onChange={(e) => setUserEdit((f) => ({ ...f, vulgo: e.target.value }))}
+                    maxLength={40}
+                    placeholder="nome de exibição na gala"
+                    className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUserEdit(null)}
+                  className="px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-sans text-body-sm transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={userSaving}
+                  className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-semibold text-body-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">save</span>
+                  {userSaving ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </ModalShell>
+        )}
+
+        {/* Confirmação DESTRUTIVA (github-style): digitar o username exato. */}
+        {userDelete && (
+          <ModalShell maxWidth="max-w-md" danger>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-symbols-outlined text-error text-[22px]">warning</span>
+              <h3 className="font-serif font-bold text-title-lg text-error">Apagar para sempre</h3>
+            </div>
+
+            <p className="font-sans text-body-sm text-on-surface-variant leading-relaxed mb-4">
+              Isso apaga <strong className="text-on-surface">@{userDelete.username}</strong> e, em
+              cascata, <strong className="text-error">todos os votos dados E recebidos</strong> por
+              ele e <strong className="text-error">todas as candidaturas</strong>. Não há como
+              desfazer.
+            </p>
+
+            <label className="flex flex-col gap-1">
+              <span className="font-sans text-[11px] text-outline uppercase tracking-wider">
+                Digite o username exato para confirmar
+              </span>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={userDelete.username}
+                autoFocus
+                className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-mono text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-error/60 transition-all"
+              />
+            </label>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setUserDelete(null)
+                  setDeleteConfirmText('')
+                }}
+                className="px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-sans text-body-sm transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteUser}
+                disabled={deleteConfirmText !== userDelete.username || userSaving}
+                className="px-3 py-1.5 rounded-lg bg-error-container/60 hover:bg-error-container text-error font-sans font-bold text-body-sm border border-error/30 hover:shadow-[0_0_16px_rgba(147,0,10,0.35)] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">delete_forever</span>
+                {userSaving ? 'Apagando...' : 'Apagar para sempre'}
+              </button>
+            </div>
+          </ModalShell>
+        )}
       </main>
 
       {/* Toast */}

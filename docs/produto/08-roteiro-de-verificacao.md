@@ -134,7 +134,7 @@ manualmente todas as chaves `pg_*` no DevTools.
 - [x] **5.2** Primeiro acesso semeia 2 candidaturas (#MIT em disputa, #PAT homologada) e o badge mostra "2/4 Ativas".
 - [x] **5.3** "Vagas Abertas" lista exatamente as 2 categorias sem candidatura.
 - [x] **5.4** Candidatar-se: modal abre com a categoria correta; contador de caracteres cresce ao digitar; acima de 280 fica vermelho e o submit desabilita.
-- [x] **5.5** Candidatura registrada → card "STATUS: EM DISPUTA" surge com protocolo `#XXX-2025-NN`; badge vira "3/4 Ativas"; a vaga da categoria some.
+- [x] **5.5** Candidatura registrada → card "STATUS: EM DISPUTA" surge com protocolo `#XXX-2026-NN`; badge vira "3/4 Ativas"; a vaga da categoria some.
 - [x] **5.6** **Perfil sincronizado:** abrir `/perfil` → "Minhas Candidaturas" mostra a nova candidatura e o contador do card do eleitor reflete 3.
 - [x] **5.7** Editar pitch (edit_note) → modal em modo edição pré-preenchido; salvar altera o texto no card e no perfil.
 - [x] **5.8** **Compartilhar:** botão share copia o texto formatado (clipboard) → toast de confirmação.
@@ -155,7 +155,7 @@ manualmente todas as chaves `pg_*` no DevTools.
 - [x] **6.4** **Auto-voto:** registrar (e logar com) o username `BetoChave` — ele não existe no seed → o card de `@BetoChave` (Melhor Participação Especial) aparece bloqueado com "voto não permitido (auto-voto é golpe)" e não é selecionável. Depois deslogar e voltar para o usuário principal.
 - [x] **6.5** Voto em branco: selar com apenas 2 de 4 categorias selecionadas → o modal lista as demais como "Voto em branco".
 - [x] **6.6** Confirmar → modal "Selar votos na urna?" lista todas as escolhas; "Cancelar" volta sem selar.
-- [x] **6.7** Selar → estado "Votos Selados na Cripta!" com hash `#GALA-2025-XXXXXX` e horário do registro.
+- [x] **6.7** Selar → estado "Votos Selados na Cripta!" com hash `#GALA-2026-XXXXXX` e horário do registro.
 - [x] **6.8** Recarregar a página → **continua selado** (persistência em `pg_votes:u<id>`).
 - [x] **6.9** Limpar `pg_votes:u<id>` no DevTools e recarregar → cédula reabre.
 - [x] **6.10** Com `pg_reveal_at` no passado → estado "As Urnas Estão Fechadas" (sem cédula).
@@ -190,7 +190,7 @@ manualmente todas as chaves `pg_*` no DevTools.
 **Objetivo:** gate de acesso e governança da gala.
 
 - [x] **8.1** Senha errada → banner "Senha soberana incorreta" + shake.
-- [x] **8.2** Senha correta (`luluka2025` ou `VITE_ADMIN_PASSWORD`) → painel com identidade `@AdminMor` no HeaderAdmin.
+- [x] **8.2** Senha correta (`luluka2026` ou `VITE_ADMIN_PASSWORD`) → painel com identidade `@AdminMor` no HeaderAdmin.
 - [x] **8.3** Fechar a aba e reabrir → sessão admin **morre** (sessionStorage) → gate novamente.
 - [x] **8.4** Stats e categorias renderizam; accordion abre/fecha com indicados e barras de votos.
 - [x] **8.5** Audit log: filtro por eleitor/categoria funciona; filtro sem resultado mostra estado vazio.

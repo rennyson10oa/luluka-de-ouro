@@ -37,6 +37,11 @@ class EventHub:
 
     async def broadcast(self, type_: str, payload: dict[str, Any]) -> None:
         """Persistiu? Então difunde. Fila que falhar é descartada do registro."""
+        self._publish(type_, payload)
+
+    def _publish(self, type_: str, payload: dict[str, Any]) -> None:
+        # Corpo da difusão em método SYNC de propósito: a presença precisa
+        # rodar no cleanup do gerador SSE (finally), onde await não é seguro.
         self.seq += 1
         evento = {"seq": self.seq, "type": type_, "payload": payload}
         self.buffer.append(evento)
@@ -48,6 +53,14 @@ class EventHub:
             except Exception:
                 # Conexão morta/lenta: não deixa a fila inviabilizar o fanout.
                 self.connections.discard(fila)
+
+    def broadcast_presence(self) -> None:
+        """Difunde a contagem de conexões vivas (type presence.update).
+
+        Cada aba/janela conta como 1 conexão — é a métrica "pessoas no
+        palco agora" exibida no chat da cerimônia.
+        """
+        self._publish("presence.update", {"online": len(self.connections)})
 
     def connect(self) -> asyncio.Queue:
         fila: asyncio.Queue = asyncio.Queue()
@@ -150,3 +163,7 @@ async def event_stream(
     finally:
         # Sempre desregistra, inclusive em desconexão/cancelamento do cliente.
         hub.disconnect(fila)
+        # Quem saiu (ou caiu) diminui a contagem — o chat do palco mostra
+        # o número ao vivo. broadcast_presence é sync: no finally do
+        # gerador (GeneratorExit) não há await seguro.
+        hub.broadcast_presence()

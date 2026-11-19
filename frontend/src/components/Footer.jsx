@@ -29,7 +29,7 @@ export function Footer() {
               <strong className="text-on-surface-variant">Sessão Notarial Criptografada</strong>
             </span>
             <span className="text-outline/40">•</span>
-            <span>Protocolo Oficial de Votações 2025</span>
+            <span>Protocolo Oficial de Votações 2026</span>
           </div>
 
           <div className="flex items-center gap-5 text-on-surface-variant">
@@ -44,7 +44,7 @@ export function Footer() {
             </a>
             <span className="text-outline/40">•</span>
             <a href="#" className="hover:text-secondary transition-colors">
-              <span>Estatuto da Zoeira</span>
+              <span>Estatuto da Galada</span>
             </a>
           </div>
         </div>
@@ -61,7 +61,7 @@ export function Footer() {
               </h3>
             </div>
             <p className="text-xs text-on-surface-variant leading-relaxed max-w-md">
-              Celebrando a mediocridade épica, áudios intermináveis de WhatsApp e prints fora de contexto com a máxima pompa e circunstância permitida pela lei do boteco.
+              Celebrando a mediocridade épica, áudios intermináveis de WhatsApp e prints fora de contexto com a máxima pompa e circunstância permitida pela lei de magolino.
             </p>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container-low border border-outline-variant/40 text-[11px] text-on-surface-variant">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -105,12 +105,12 @@ export function Footer() {
         {/* ---- Rodapé Final ---- */}
         <div className="pt-6 border-t border-outline-variant/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-outline">
           <div>
-            © 2025 Prêmios do Grupo. Nenhum admin foi ferido durante a contagem de votos.
+            © 2026 Prêmios do Grupo. Nenhum admin foi ferido durante a contagem de votos.
           </div>
           <div className="flex items-center gap-4">
-            <span>Edição Oficial 2025</span>
+            <span>Edição Oficial 2026</span>
             <span>•</span>
-            <span>Cripto-Zoeira 256-bit</span>
+            <span>Cripto-Seco 256-bit</span>
             <span>•</span>
             <button
               type="button"
@@ -137,10 +137,10 @@ export function FooterAuth() {
   return (
     <footer className="w-full py-6 flex flex-col items-center justify-center text-center space-y-2">
       <span className="text-xs text-on-surface-variant">
-        Sessão Notarial Criptografada • Cartório de Boteco • 2025
+        Sessão Notarial Criptografada • Cartório da Galada • 2026
       </span>
       <p className="text-[11px] text-outline">
-        © 2025 Academia das Artes e Zoações do Grupo. Nenhum admin foi ferido durante a contagem.
+        © 2026 Academia das Artes e Zoações do Grupo. Nenhum admin foi ferido durante a contagem.
       </p>
     </footer>
   )

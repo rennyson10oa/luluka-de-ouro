@@ -36,6 +36,8 @@ export function GalaEventsProvider({ children }) {
   const [ceremony, setCeremony] = useState(CERIMONIA_NAO_INICIADA)
   const [totals, setTotals] = useState(null) // { totalVotos, totalUsers, totalCandidatos, votacaoAberta, revealAt }
   const [chat, setChat] = useState([])
+  // Presença ao vivo (presence.update do hub): conexões SSE vivas no palco.
+  const [online, setOnline] = useState(0)
 
   const esRef = useRef(null)
   const timerRef = useRef(null)
@@ -91,6 +93,10 @@ export function GalaEventsProvider({ children }) {
         })
         break
       }
+      case 'presence.update':
+        // Cada aba/janela = 1 conexão. O chat exibe "N no palco agora".
+        setOnline(evt.payload.online ?? 0)
+        break
       default:
         break
     }
@@ -212,7 +218,7 @@ export function GalaEventsProvider({ children }) {
   }, [resync])
 
   return (
-    <GalaEventsContext.Provider value={{ status, ceremony, totals, chat, onEvent, sendMessage, refresh }}>
+    <GalaEventsContext.Provider value={{ status, ceremony, totals, chat, online, onEvent, sendMessage, refresh }}>
       {children}
     </GalaEventsContext.Provider>
   )

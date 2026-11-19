@@ -65,7 +65,7 @@ export default function LoginPage() {
         <div className="flex justify-center -mb-3 relative z-20">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-highest/90 backdrop-blur-md shadow-[0_4px_16px_rgba(0,0,0,0.6)]">
             <span className="material-symbols-outlined text-primary text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-            <span className="font-sans font-bold text-label-sm text-secondary uppercase tracking-widest">Acesso Oficial 2025</span>
+            <span className="font-sans font-bold text-label-sm text-secondary uppercase tracking-widest">Acesso Oficial 2026</span>
           </div>
         </div>
 
@@ -231,14 +231,14 @@ export default function LoginPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
             <span>SESSÃO CRIPTOGRAFADA</span>
           </span>
-          <span>ACADEMIA DO GRUPO • 2025</span>
+          <span>ACADEMIA DO GRUPO • 2026</span>
         </div>
 
         {/* Rodapé de links */}
         <div className="mt-4 text-center flex items-center justify-center gap-space-md text-outline">
-          <span className="font-sans text-body-sm">Edição Oficial 2025</span>
+          <span className="font-sans text-body-sm">Edição Oficial 2026</span>
           <span>•</span>
-          <a href="#" className="font-sans text-body-sm hover:text-secondary transition-colors">Estatuto da Zoeira</a>
+          <a href="#" className="font-sans text-body-sm hover:text-secondary transition-colors">Estatuto da Galada</a>
           <span>•</span>
           <a href="#" className="font-sans text-body-sm hover:text-secondary transition-colors">Tribunal de Recursos</a>
         </div>

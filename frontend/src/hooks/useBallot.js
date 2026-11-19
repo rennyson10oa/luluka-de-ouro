@@ -32,10 +32,10 @@ export function normalize(value) {
   return String(value || '').trim().toLowerCase().replace(/^@/, '')
 }
 
-/** Hash fake notarial: #GALA-2025-XXXXXX (6 hex aleatórios) — cosmético. */
+/** Hash fake notarial: #GALA-2026-XXXXXX (6 hex aleatórios) — cosmético. */
 function generateHash() {
   const hex = Array.from({ length: 6 }, () => '0123456789ABCDEF'[Math.floor(Math.random() * 16)]).join('')
-  return `#GALA-2025-${hex}`
+  return `#GALA-2026-${hex}`
 }
 
 /**

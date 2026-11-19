@@ -268,13 +268,13 @@ export default function VotePage() {
               <div className="space-y-2 max-w-3xl">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container-high text-primary font-sans font-bold text-label-sm uppercase tracking-widest">
                   <span className="material-symbols-outlined text-[14px]">verified</span>
-                  Protocolo Soberano • Edição Anual 2025
+                  Protocolo Soberano • Edição Anual 2026
                 </div>
                 <h1 className="font-serif font-bold text-headline-lg text-primary tracking-tight">
                   Cédula Oficial de <span className="gold-gradient-text">Votação</span>
                 </h1>
                 <p className="font-serif italic text-headline-sm text-secondary">
-                  Academia da Resenha &amp; Zoeira Suprema
+                  Academia da Galada &amp; Zoeira Suprema
                 </p>
                 <p className="font-sans text-body-md text-on-surface-variant pt-1 max-w-2xl">
                   Seu voto é 100% secreto, inviolável e auditado diretamente pelo bot. Você pode alterar qualquer indicação livremente até o soar do gongo e o fechamento irrestrito das urnas.
@@ -287,7 +287,7 @@ export default function VotePage() {
                   <span className="material-symbols-outlined text-primary text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>how_to_vote</span>
                 </div>
                 <span className="font-sans font-bold text-label-sm text-primary tracking-widest uppercase">Criptografia</span>
-                <span className="font-sans text-body-sm text-outline">Ponta-a-Zoeira 256-bit</span>
+                <span className="font-sans text-body-sm text-outline">Dick-a-Dick 256-bit</span>
               </div>
             </div>
 

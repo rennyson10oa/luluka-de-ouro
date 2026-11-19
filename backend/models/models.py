@@ -29,6 +29,13 @@ class Category(Base):
     emoji = Column(String, nullable=False)
     reveal_order = Column(Integer, nullable=False)
     modo = Column(String, nullable=False) # "candidatos" | "aberta"
+    # Texto oficial da categoria (landing/substitui a copy cenográfica mock).
+    # Nullable: categorias antigas podem nascer sem texto — o frontend cai
+    # na copy cenográfica default quando vier vazio.
+    description = Column(String, nullable=True)
+    # Textinho auxiliar de critério exibido no rodapé do card da landing
+    # (ex.: "Critério: destruição retórica").
+    criteria = Column(String, nullable=True)
 
     candidacies = relationship("Candidacy", back_populates="category")
     votes = relationship("Vote", back_populates="category")

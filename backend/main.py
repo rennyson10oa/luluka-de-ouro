@@ -46,6 +46,10 @@ with engine.connect() as conn:
         "ALTER TABLE settings ADD COLUMN ceremony_phase VARCHAR",
         "ALTER TABLE settings ADD COLUMN ceremony_category_id INTEGER",
         "ALTER TABLE settings ADD COLUMN ceremony_revealed VARCHAR",
+        # Texto oficial das categorias (descrição + critério auxiliar).
+        # Nullable: categorias antigas continuam válidas sem os dois campos.
+        "ALTER TABLE categories ADD COLUMN description VARCHAR",
+        "ALTER TABLE categories ADD COLUMN criteria VARCHAR",
     ):
         try:
             conn.execute(text(stmt))

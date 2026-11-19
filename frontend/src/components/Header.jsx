@@ -43,10 +43,10 @@ export default function Header() {
           </div>
           <div className="flex flex-col">
             <span className="font-serif font-bold text-sm tracking-wider uppercase gold-gradient-text">
-              Prêmios do Grupo 2025
+              Prêmios do Grupo 2026
             </span>
             <span className="text-[10px] tracking-widest text-on-surface-variant font-medium uppercase -mt-0.5">
-              A Gala Suprema da Zoeira
+              A Gala Suprema
             </span>
           </div>
         </Link>
@@ -77,14 +77,14 @@ export default function Header() {
             to="/reveal"
             className={navClasses(currentPath === '/reveal')}
           >
-            A Cerimônia
+            La Cerimônia
           </Link>
 
           <Link
             to="/resultados"
             className={navClasses(currentPath === '/resultados')}
           >
-            Galeria de Resultados
+            Galeria dos Imortais
           </Link>
 
           <Link

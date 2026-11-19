@@ -22,6 +22,8 @@ class UserResponse(BaseModel):
     vulgo: Optional[str] = None
     # Caminho relativo salvo no servidor (ex.: "uploads/ab12….png"); None se não houver.
     avatar: Optional[str] = None
+    # Registro no cartório (exibido no perfil como "Membro desde").
+    created_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):
@@ -66,6 +68,8 @@ class CategoryResponse(BaseModel):
     emoji: str
     modo: str
     reveal_order: int
+    description: Optional[str] = None
+    criteria: Optional[str] = None
     candidacies: List[CandidacyResponse] = []
     model_config = ConfigDict(from_attributes=True)
 
@@ -102,6 +106,10 @@ class CategoryCreate(BaseModel):
     emoji: str = Field("", max_length=8)
     modo: Literal["candidatos", "aberta"]
     reveal_order: int = Field(..., ge=1)
+    # Texto oficial: descrição + critério auxiliar (o frontend mostra
+    # fallback cenográfico quando vierem vazios). String vazia => NULL.
+    description: str = Field("", max_length=500)
+    criteria: str = Field("", max_length=200)
 
 
 class CategoryUpdate(BaseModel):
@@ -110,6 +118,8 @@ class CategoryUpdate(BaseModel):
     emoji: Optional[str] = Field(None, max_length=8)
     modo: Optional[Literal["candidatos", "aberta"]] = None
     reveal_order: Optional[int] = Field(None, ge=1)
+    description: Optional[str] = Field(None, max_length=500)
+    criteria: Optional[str] = Field(None, max_length=200)
 
 
 class NomineeCreate(BaseModel):
@@ -125,6 +135,36 @@ class AuditLogResponse(BaseModel):
     detail: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdminUserResponse(BaseModel):
+    """Item da listagem administrativa de usuários.
+
+    `avatar` expõe o caminho RELATIVO salvo no banco (ex.: "uploads/ab12.png"),
+    nunca o caminho de disco: o admin só precisa saber se há avatar; o arquivo
+    em si não tem rota pública/de admin (decisão de escopo deste painel).
+    """
+
+    id: int
+    username: str
+    vulgo: Optional[str] = None
+    is_guest: bool
+    avatar: Optional[str] = None
+    created_at: Optional[datetime] = None
+    candidacies_count: int
+    votes_given_count: int
+    votes_received_count: int
+
+
+class AdminUserUpdate(BaseModel):
+    """Edição administrativa: apenas os campos ENVIADOS são aplicados.
+
+    `exclude_unset` no endpoint distingue OMISSÃO (não toca) de NULL/"" (limpa).
+    `vulgo` aceita string vazia de propósito: é como o painel limpa o apelido.
+    """
+
+    username: Optional[str] = Field(None, max_length=30)
+    vulgo: Optional[str] = Field(None, max_length=40)
 
 
 class PodiumItem(BaseModel):

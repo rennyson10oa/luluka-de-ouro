@@ -380,3 +380,217 @@ def test_audit_log(client, db_session):
     sem_auth = client.get("/api/admin/audit")
     assert sem_auth.status_code == 401
 
+
+# ---------------------------------------------------------------------------
+# Gerenciamento de usuários (admin)
+# ---------------------------------------------------------------------------
+def test_admin_list_users(client, db_session):
+    # Dois eleitores reais: A dá voto em B e B dá voto em A na MESMA categoria
+    # (a unicidade é por voter+category, então os dois votos coexistem).
+    headers_a = _user_headers(client, "listuser_a")
+    headers_b = _user_headers(client, "listuser_b")
+    id_a = client.get("/api/me", headers=headers_a).json()["id"]
+    id_b = client.get("/api/me", headers=headers_b).json()["id"]
+
+    cat = models.Category(
+        title="Cat Lista", emoji="L", reveal_order=50, modo="aberta"
+    )
+    db_session.add(cat)
+    db_session.commit()
+    db_session.refresh(cat)
+
+    resp_a = client.post(
+        "/api/votes",
+        json={"category_id": cat.id, "voted_user_id": id_b},
+        headers=headers_a,
+    )
+    assert resp_a.status_code == 200, resp_a.text
+    resp_b = client.post(
+        "/api/votes",
+        json={"category_id": cat.id, "voted_user_id": id_a},
+        headers=headers_b,
+    )
+    assert resp_b.status_code == 200, resp_b.text
+
+    admin_headers = _admin_headers(client)
+    resp = client.get("/api/admin/users", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+
+    por_nome = {u["username"]: u for u in resp.json()}
+    assert "listuser_a" in por_nome
+    assert "listuser_b" in por_nome
+
+    a = por_nome["listuser_a"]
+    assert a["id"] == id_a
+    assert a["is_guest"] is False
+    assert a["avatar"] is None
+    assert a["created_at"] is not None
+    assert a["candidacies_count"] == 0
+    assert a["votes_given_count"] == 1
+    assert a["votes_received_count"] == 1
+
+    b = por_nome["listuser_b"]
+    assert b["votes_given_count"] == 1
+    assert b["votes_received_count"] == 1
+
+
+def test_admin_update_user(client, db_session):
+    headers = _user_headers(client, "updatable")
+    _user_headers(client, "already_taken")
+    user_id = client.get("/api/me", headers=headers).json()["id"]
+    admin_headers = _admin_headers(client)
+
+    # PUT do vulgo → resposta e GET refletem.
+    resp = client.put(
+        f"/api/admin/users/{user_id}",
+        json={"vulgo": "O Grande"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["vulgo"] == "O Grande"
+
+    lista = client.get("/api/admin/users", headers=admin_headers).json()
+    alvo = next(u for u in lista if u["id"] == user_id)
+    assert alvo["vulgo"] == "O Grande"
+
+    # Username já usado por OUTRO id → 409 com a mensagem exata.
+    conflito = client.put(
+        f"/api/admin/users/{user_id}",
+        json={"username": "already_taken"},
+        headers=admin_headers,
+    )
+    assert conflito.status_code == 409
+    assert conflito.json()["detail"] == "Já existe um usuário com esse nome"
+
+    # Vulgo vazio LIMPA o apelido (vira null no JSON).
+    limpo = client.put(
+        f"/api/admin/users/{user_id}",
+        json={"vulgo": ""},
+        headers=admin_headers,
+    )
+    assert limpo.status_code == 200, limpo.text
+    assert limpo.json()["vulgo"] is None
+
+
+def test_admin_delete_user(client, db_session):
+    headers_a = _user_headers(client, "deluser_a")
+    headers_b = _user_headers(client, "deluser_b")
+    id_a = client.get("/api/me", headers=headers_a).json()["id"]
+    id_b = client.get("/api/me", headers=headers_b).json()["id"]
+
+    cat = models.Category(
+        title="Cat Delete", emoji="D", reveal_order=51, modo="candidatos"
+    )
+    db_session.add(cat)
+    db_session.commit()
+    db_session.refresh(cat)
+
+    # A é candidato; A vota em B e B vota em A (A terá voto dado e recebido).
+    candidatura = client.post(
+        "/api/candidacies",
+        json={"category_id": cat.id, "pitch": "A"},
+        headers=headers_a,
+    )
+    assert candidatura.status_code == 201, candidatura.text
+    assert (
+        client.post(
+            "/api/votes",
+            json={"category_id": cat.id, "voted_user_id": id_b},
+            headers=headers_a,
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/votes",
+            json={"category_id": cat.id, "voted_user_id": id_a},
+            headers=headers_b,
+        ).status_code
+        == 200
+    )
+
+    admin_headers = _admin_headers(client)
+    apagado = client.delete(f"/api/admin/users/{id_a}", headers=admin_headers)
+    assert apagado.status_code == 204
+
+    # Sumiu da listagem administrativa.
+    lista = client.get("/api/admin/users", headers=admin_headers).json()
+    assert all(u["id"] != id_a for u in lista)
+
+    # Candidatura sumiu do endpoint público de categorias.
+    categorias = client.get("/api/categories").json()
+    cat_publica = next(c for c in categorias if c["id"] == cat.id)
+    assert all(c["user_id"] != id_a for c in cat_publica["candidacies"])
+
+    # Votos dados/recebidos do usuário sumiram do banco.
+    db_session.expire_all()
+    votos = (
+        db_session.query(models.Vote)
+        .filter(
+            (models.Vote.voter_id == id_a) | (models.Vote.voted_user_id == id_a)
+        )
+        .count()
+    )
+    assert votos == 0
+
+    # Segunda tentativa de DELETE → 404.
+    novamente = client.delete(f"/api/admin/users/{id_a}", headers=admin_headers)
+    assert novamente.status_code == 404
+
+
+
+# ---------------------------------------------------------------------------
+# Ata pessoal do eleitor (/api/audit/me)
+# ---------------------------------------------------------------------------
+def test_audit_me(client, db_session):
+    headers_a = _user_headers(client, "atauser_a")
+    headers_b = _user_headers(client, "atauser_b")
+    admin_headers = _admin_headers(client)
+
+    # Categoria com B candidato, para A poder votar em B.
+    categoria = client.post(
+        "/api/admin/categories",
+        json={
+            "title": "Ata Pessoal Teste",
+            "emoji": "📋",
+            "modo": "candidatos",
+            "reveal_order": 9,
+        },
+        headers=admin_headers,
+    ).json()
+    candidatura = client.post(
+        "/api/candidacies",
+        json={"category_id": categoria["id"], "pitch": "pitch do B"},
+        headers=headers_b,
+    )
+    assert candidatura.status_code == 201, candidatura.text
+
+    # A vota em B: o ato entra na ata com actor = A.
+    voto = client.post(
+        "/api/votes",
+        json={
+            "category_id": categoria["id"],
+            "voted_user_id": candidatura.json()["user_id"],
+        },
+        headers=headers_a,
+    )
+    assert voto.status_code == 200, voto.text
+
+    # Ata pessoal de A: só atos de A, e o voto está lá.
+    minha = client.get("/api/audit/me", headers=headers_a)
+    assert minha.status_code == 200, minha.text
+    registros = minha.json()
+    assert all(r["actor"] == "atauser_a" for r in registros)
+    assert any(r["action"] == "voto_registrado" for r in registros)
+    assert any("voto em @atauser_b" in r["detail"] for r in registros)
+
+    # B tem a candidatura dele na PRÓPRIA ata — e o voto de A NÃO vaza para B.
+    minha_b = client.get("/api/audit/me", headers=headers_b)
+    assert minha_b.status_code == 200
+    registros_b = minha_b.json()
+    assert all(r["actor"] == "atauser_b" for r in registros_b)
+    assert any(r["action"] == "candidatura_criada" for r in registros_b)
+    assert all(r["action"] != "voto_registrado" for r in registros_b)
+
+    # Sem sessão, a ata pessoal é fechada.
+    assert client.get("/api/audit/me").status_code == 401

@@ -13,7 +13,7 @@ import useGalaState from './useGalaState'
  * derivado de GET /api/categories, filtrando as candidacies cujo user_id é o
  * usuário logado. Escrita via POST /api/candidacies e PUT /api/candidacies/{id}.
  *
- * O protocolo (#XXX-2025-NN) NÃO existe no servidor — é gerado localmente e
+ * O protocolo (#XXX-2026-NN) NÃO existe no servidor — é gerado localmente e
  * determinístico por candidacy.id apenas para exibição (pendência de Fase 3).
  * O `status` também não vem da API: o dossiê real nasce como 'em_disputa'.
  *
@@ -32,7 +32,7 @@ const CATEGORY_DESCRIPTION_FALLBACK =
   'Categoria oficial da gala. Mostre por que você merece este troféu.'
 
 /**
- * Gera o protocolo de DISPLAY: '#' + até 3 iniciais da categoria + '-2025-' +
+ * Gera o protocolo de DISPLAY: '#' + até 3 iniciais da categoria + '-2026-' +
  * 2 dígitos derivados do id da candidatura (estável entre refetches).
  */
 function buildProtocol(categoryTitle, seed) {
@@ -47,7 +47,7 @@ function buildProtocol(categoryTitle, seed) {
     .slice(0, 3)
   const numericSeed = Number.isFinite(Number(seed)) ? Number(seed) : 0
   const digits = String(Math.abs(numericSeed) % 100).padStart(2, '0')
-  return `#${initials || 'GAL'}-2025-${digits}`
+  return `#${initials || 'GAL'}-2026-${digits}`
 }
 
 /** Mapeia uma candidacy do backend para o item de exibição da urna. */

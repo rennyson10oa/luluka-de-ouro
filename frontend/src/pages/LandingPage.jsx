@@ -9,40 +9,15 @@ import { apiFetch } from '../utils/api'
 import Trophy3D from '../components/Trophy3D'
 import Countdown from '../components/Countdown'
 
-// Mock categories data — replace with /api/categories when API is ready
 /**
- * COPY cenográfica das categorias da landing (decisão de limpeza dos mocks):
- * as frases são conteúdo de zoeira, mas os DADOS agora vêm do servidor.
- * Chave = título normalizado (minúsculas). Categoria criada pelo admin sem
- * copy aqui recebe descrição genérica — a landing nunca mostra dado falso.
+ * Descrição GENÉRICA das categorias (não é mock de dados): a landing busca
+ * as categorias REAIS em /api/categories, e o texto oficial (description/
+ * criteria, editável no admin) vem do banco. Esta frase padrão cobre apenas
+ * o card que o admin ainda não descreveu — nunca mostra dado falso.
  */
-const CATEGORY_COPY = {
-  'melhor participação especial': {
-    description: 'Dedicado àquele sujeito lendário que sumiu por 8 meses seguidos, não respondeu "bom dia", mas do nada dropou um áudio bombástico de 4 minutos no meio do expediente e evaporou de novo.',
-    favorite: '"O Fantasma do Zap"',
-  },
-  'membro com mais pataquadas': {
-    description: 'O acervo vivo de gafes, prints censurados, mensagens mandadas no grupo errado, compras absurdas na Shopee e mancadas memoráveis que mantiveram o entretenimento do grupo no teto.',
-    favorite: 'Recorde: 48 prints incriminadores',
-  },
-  'membro com mais mitadas': {
-    description: 'Respostas cirúrgicas na velocidade da luz, stickers milimetricamente calculados, jogadas inacreditáveis na call do Discord e tiradas que calaram a boca de todos instantaneamente.',
-    favorite: 'Critério: Destruição retórica',
-  },
-  'qi de temperatura ambiente': {
-    description: 'Para raciocínios que desafiaram a ciência, hipóteses astronômicas sem pé nem cabeça, confusões geográficas imperdoáveis e teorias que deixaram todos na call em silêncio absoluto por 20 segundos.',
-    favorite: 'Média térmica: 22° Celsius',
-  },
-}
-
-/** Descrição genérica para categoria sem copy cenográfica registrada. */
 const COPY_GENERICO = {
   description: 'Disputa oficial da gala: vote no mais merecedor — ou no menos merecedor, o critério é seu.',
   favorite: 'Critério: puro e honesto caos',
-}
-
-function normalizeTitle(title) {
-  return String(title || '').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
 function CategoryCard({ category }) {
@@ -149,11 +124,11 @@ function HeroSection() {
               Troféu Oficial • Ouro Maciço 24k (Quase)
             </span>
             <span className="font-sans text-body-sm text-on-surface-variant">
-              Busto Comemorativo do Davi Jones &amp; Mestre Supremo da Resenha
+              Busto Comemorativo do Davi Jones &amp; Mestre Supremo da Galada (No finalzinho... tinha um negocinho....)
             </span>
           </div>
           <span className="hidden sm:inline-block ml-auto px-2 py-0.5 rounded bg-surface-container font-sans font-bold text-label-sm text-secondary tracking-widest uppercase">
-            Edição 2025
+            Edição 2026
           </span>
         </div>
       </div>
@@ -197,7 +172,7 @@ function CTASection() {
         <span className="material-symbols-outlined text-primary text-[18px]">how_to_vote</span>
         <span><strong>{totalVotosLabel}</strong> votos já computados em sigilo absoluto</span>
         <span className="w-1 h-1 rounded-full bg-outline" />
-        <span className="text-secondary">42 membros da Academia já votaram</span>
+        <span className="text-secondary">só falta o seu</span>
       </div>
     </section>
   )
@@ -251,22 +226,21 @@ function CategoriesSection() {
 
       {/* Cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
-        {categories.map((cat) => {
-          const copy = CATEGORY_COPY[normalizeTitle(cat.title)] || COPY_GENERICO
-          return (
-            <CategoryCard
-              key={cat.id}
-              category={{
-                id: cat.id,
-                emoji: cat.emoji,
-                title: cat.title,
-                nominees: cat.candidacies?.length || 0,
-                description: copy.description,
-                favorite: copy.favorite,
-              }}
-            />
-          )
-        })}
+        {categories.map((cat) => (
+          <CategoryCard
+            key={cat.id}
+            category={{
+              id: cat.id,
+              emoji: cat.emoji,
+              title: cat.title,
+              nominees: cat.candidacies?.length || 0,
+              // Texto OFICIAL do banco (editável no admin); a descrição
+              // genérica acima cobre só o card ainda não preenchido.
+              description: cat.description || COPY_GENERICO.description,
+              favorite: cat.criteria || COPY_GENERICO.favorite,
+            }}
+          />
+        ))}
         {categories.length === 0 && (
           <p className="font-sans text-body-md text-outline italic">
             As categorias da gala ainda não foram publicadas — fique de olho.
@@ -300,11 +274,11 @@ function CeremonySection() {
             </h2>
 
             <p className="font-sans text-body-lg text-on-surface-variant leading-relaxed">
-              Nada de enquete mixuruca no feed. No dia marcado, a rota{' '}
+              Nada de enquete mixuruca no feed. No dia marcado, a página de {' '}
               <code className="px-2 py-0.5 rounded bg-surface-container-highest text-primary font-mono text-sm font-semibold">
-                /reveal
+                votacão
               </code>{' '}
-              se transformará numa arena de premiação cinematográfica sincronizada por WebSockets.
+              se transformará numa arena de premiação cinematográfica sincronizada com TODOS AO MESMO TEMPO.
             </p>
 
             {/* 3 step highlights */}
@@ -312,7 +286,7 @@ function CeremonySection() {
               {[
                 { icon: 'graphic_eq', title: 'Drumroll Tenso', desc: 'Áudios dramáticos de suspense e contagem de votos voto-a-voto na tela de todos.' },
                 { icon: 'celebration', title: 'Chuva de Confetes', desc: 'Disparo de partículas e badges dourados no momento exato em que o campeão for anunciado.' },
-                { icon: 'military_tech', title: 'Pódio Interativo', desc: 'Pedestais de 1º, 2º e 3º lugar com o print da mitada e direito a discurso no canal de voz.' },
+                { icon: 'military_tech', title: 'Pódio Interativo', desc: 'Pedestais de 1º, 2º e 3º lugar com direito a um chat em tempo real.' },
               ].map(({ icon, title, desc }) => (
                 <div key={title} className="p-4 rounded-xl bg-surface-container-high/60">
                   <span className="material-symbols-outlined text-primary text-[28px] mb-2">{icon}</span>
@@ -332,7 +306,7 @@ function CeremonySection() {
               Garanta seu Voto
             </span>
             <p className="font-sans text-body-sm text-on-surface-variant mb-6">
-              A ata da Academia só aceita votos até o sino das 21:00h. Não deixe o amigo inimputável vencer sem oposição!
+              A ata da Academia só aceita votos até o horário final estabelecido. Não deixe seu amigo betinha vencer sem oposição!
             </p>
             <button
               type="button"
@@ -352,7 +326,7 @@ function CeremonySection() {
 export default function LandingPage() {
   const location = useLocation()
 
-  // Support for cross-page anchor navigation (e.g., /#erimonia from another page)
+  // Support for cross-page anchor navigation (e.g., cerimonia from another page)
   useEffect(() => {
     if (location.hash) {
       const timer = setTimeout(() => {

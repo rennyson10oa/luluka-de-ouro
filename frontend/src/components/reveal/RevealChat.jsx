@@ -14,7 +14,7 @@ import useGalaEvents from '../../hooks/useGalaEvents'
  */
 
 export default function RevealChat({ active, currentUser }) {
-  const { chat, sendMessage, status } = useGalaEvents()
+  const { chat, sendMessage, status, online } = useGalaEvents()
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -49,6 +49,16 @@ export default function RevealChat({ active, currentUser }) {
         <span className="font-sans font-bold text-label-sm text-secondary uppercase tracking-widest">
           {status === 'conectado' ? 'Chat ao vivo do cartório' : 'Reconectando ao cartório...'}
         </span>
+        {/* Presença ao vivo (presence.update do hub): cada aba = 1 conexão. */}
+        {status === 'conectado' && online > 0 && (
+          <span
+            title="Pessoas conectadas ao palco agora"
+            className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container-high/80 border border-outline-variant/40 text-outline font-sans font-bold text-[10px] font-mono"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            {online}
+          </span>
+        )}
       </div>
 
       {/* Histórico (GET /api/chat/recent + eventos chat.message) */}

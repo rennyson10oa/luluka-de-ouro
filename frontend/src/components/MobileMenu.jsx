@@ -147,7 +147,7 @@ export default function MobileMenu({ open, onClose }) {
         </nav>
 
         <p className="mt-auto text-center font-sans text-[11px] text-outline select-none">
-          ACADEMIA DAS ARTES E ZOAÇÕES • EDIÇÃO 2025
+          ACADEMIA DAS ARTES E ZOAÇÕES • EDIÇÃO 2026
         </p>
       </div>
     </div>

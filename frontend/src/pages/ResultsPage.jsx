@@ -14,7 +14,7 @@ import apiFetch from '../utils/api'
  * exibida separadamente no hero.
  */
 const RESULTS_COPY = {
-  edition: '2025',
+  edition: '2026',
   seal: 'Ata Notarial Homologada • Votação Encerrada',
 }
 
@@ -371,7 +371,7 @@ function FinalCta({ onReplay }) {
         Um Brinde à Próxima Temporada 🥂
       </h2>
       <p className="font-sans text-body-md text-on-surface-variant max-w-xl">
-        Que 2026 traga vergonhas ainda mais cinematográficas, áudios ainda mais longos e prints ainda mais comprometedores.
+        Que 2027 traga vergonhas ainda mais cinematográficas, áudios ainda mais longos e prints ainda mais comprometedores.
       </p>
       <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
         <Link

@@ -258,7 +258,7 @@ export default function AccountSettings({ user, onToast }) {
         <div className="bg-surface-container-lowest/60 rounded-lg p-3 flex items-start gap-2 text-on-surface-variant">
           <span className="material-symbols-outlined text-[16px] text-primary flex-shrink-0 mt-0.5">info</span>
           <p className="font-sans text-body-sm text-[11px] leading-tight">
-            Mínimo 4 caracteres. Senha fraca é permitida, aqui é zoeira.
+            Mínimo 4 caracteres. Senha fraca é permitida, aqui é zoeira garai.
           </p>
         </div>
 
