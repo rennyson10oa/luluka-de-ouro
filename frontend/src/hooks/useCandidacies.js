@@ -27,7 +27,7 @@ const STOPWORDS = new Set([
   'e', 'para', 'por', 'em', 'no', 'na', 'um', 'uma',
 ])
 
-/** Descrição genérica: a API não expõe a descrição da categoria. */
+/** Descrição oficial REAL (categories.description) com fallback genérico. */
 const CATEGORY_DESCRIPTION_FALLBACK =
   'Categoria oficial da gala. Mostre por que você merece este troféu.'
 
@@ -110,7 +110,8 @@ export default function useCandidacies() {
         id: cat.id,
         title: cat.title,
         emoji: cat.emoji,
-        description: CATEGORY_DESCRIPTION_FALLBACK,
+        // Texto OFICIAL do banco (editável no admin); fallback só se vazio.
+        description: cat.description || CATEGORY_DESCRIPTION_FALLBACK,
       }))
     )
 

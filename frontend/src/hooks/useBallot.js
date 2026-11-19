@@ -39,9 +39,8 @@ function generateHash() {
 }
 
 /**
- * O endpoint /api/categories não expõe descrição da categoria (só title/emoji/
- * modo). Mantemos uma descrição genérica para o CategorySection não renderizar
- * vazio — pendência de conteúdo para a Fase 3.
+ * Descrição oficial REAL (categories.description, editável no admin) com
+ * fallback genérico só para categoria que o admin ainda não descreveu.
  */
 const CATEGORY_DESCRIPTION_FALLBACK =
   'Disputa oficial da gala. Eleja o indicado mais merecedor desta categoria.'
@@ -55,7 +54,8 @@ function mapCategory(cat) {
     emoji: cat.emoji,
     modo: cat.modo,
     reveal_order: cat.reveal_order,
-    description: CATEGORY_DESCRIPTION_FALLBACK,
+    // Texto OFICIAL do banco (a copy fixa acima é só fallback de apresentação).
+    description: cat.description || CATEGORY_DESCRIPTION_FALLBACK,
     nominees: candidacies.map((cand) => ({
       // O id do nominee É o user_id: é ele que o POST /api/votes espera.
       id: cand.user_id,
