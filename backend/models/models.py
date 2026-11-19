@@ -54,6 +54,40 @@ class Candidacy(Base):
         UniqueConstraint("category_id", "user_id", name="_category_user_uc"),
     )
 
+class CandidacySuggestion(Base):
+    """Sugestão de candidatura: alguém lembra de uma situação de OUTRA pessoa.
+
+    Mecânica: o AUTOR descreve um pitch para um ALVO; o alvo decide na caixa de
+    entrada (aceita ou rejeita). Aceitar NÃO cria uma segunda candidatura do
+    alvo na mesma categoria: se ele já concorre ali, o pitch da candidatura
+    existente é substituído (id preservado); se não concorre, uma candidatura
+    é criada. Isso mantém a regra dura de UniqueConstraint(category_id,
+    user_id) em Candidacy — nunca duas candidaturas do mesmo usuário na mesma
+    categoria. O histórico fica nesta tabela separada, sem inflar a urna.
+
+    Tabela NOVA: o create_all do main.py já a cria em bancos existentes (sem
+    ALTER TABLE). Relacionamentos com User têm foreign_keys explícitas porque
+    existem DUAS FKs para users (autor e alvo).
+    """
+
+    __tablename__ = "candidacy_suggestions"
+    id = Column(Integer, primary_key=True, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    pitch = Column(String(280), nullable=False)
+    # "pending" | "accepted" | "rejected" — o default também vale para inserts
+    # feitos fora do ORM (ex.: SQL manual em manutenção).
+    status = Column(String, nullable=False, default="pending", server_default="pending")
+    created_at = Column(DateTime, server_default=func.now())
+    # Preenchido SOMENTE quando o alvo decide; pending mantém NULL.
+    decided_at = Column(DateTime, nullable=True)
+
+    category = relationship("Category")
+    target_user = relationship("User", foreign_keys=[target_user_id])
+    author_user = relationship("User", foreign_keys=[author_user_id])
+
+
 class Vote(Base):
     __tablename__ = "votes"
     id = Column(Integer, primary_key=True, index=True)

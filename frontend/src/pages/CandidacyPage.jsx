@@ -2,15 +2,21 @@ import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import useAuth from '../hooks/useAuth'
 import useCandidacies from '../hooks/useCandidacies'
+import apiFetch, { extractErrorDetail } from '../utils/api'
 import Header from '../components/Header'
 import { Footer } from '../components/Footer'
 import CandidacyCard from '../components/candidacy/CandidacyCard'
 import CandidacyModal from '../components/candidacy/CandidacyModal'
+import SuggestionModal from '../components/candidacy/SuggestionModal'
 
 /**
- * Cheque síncrono de sessão. O useAuth hidrata de forma assíncrona (useEffect),
- * então no 1º render após navegar de /login o estado ainda é null.
- * Sem este chequeo, um usuário logado receberia um redirect falso para /login.
+ * CandidacyPage — Urna de Candidaturas (/candidaturas).
+ * Guard idêntico ao VotePage. Fase 2 (ADR-0002): o dossiê vem do backend real
+ * via useCandidacies (POST/PUT em /api/candidacies) — sem localStorage.
+ *
+ * Também abriga o envio de SUGESTÕES de candidatura: o eleitor lembra de uma
+ * situação de outra pessoa e propõe um pitch (POST /api/suggestions). Quem
+ * aceita ou recusa é o alvo, na caixa de entrada do perfil.
  */
 function hasStoredSession() {
   try {
@@ -29,9 +35,7 @@ export default function CandidacyPage() {
   const { isAuthenticated, user } = useAuth()
   const {
     candidacies,
-    maxCandidacies,
     usedCount,
-    remaining,
     openCategories,
     addCandidacy,
     updatePitch,
@@ -43,6 +47,10 @@ export default function CandidacyPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalCategory, setModalCategory] = useState(null)
   const [modalEditing, setModalEditing] = useState(null)
+  // Modal de sugestão: reaproveitado tanto nas Vagas Abertas quanto nos cards
+  // de "Minhas Candidaturas" (a categoria é a única coisa que muda).
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const [suggestCategory, setSuggestCategory] = useState(null)
 
   function showToast(msg) {
     setToast(msg)
@@ -79,6 +87,56 @@ export default function CandidacyPage() {
     setModalEditing(candidacy)
     setModalCategory(null)
     setModalOpen(true)
+  }
+
+  /** Abre o modal já apontando para a categoria (Vaga Aberta ou dossiê). */
+  function openSuggest(category) {
+    setSuggestCategory(category)
+    setSuggestOpen(true)
+  }
+
+  // Sugestão vinda de um card de "Minhas Candidaturas" (só temos ids/títulos
+  // no item de exibição, não a categoria original do hook).
+  function openSuggestFromCandidacy(candidacy) {
+    openSuggest({
+      id: candidacy.categoryId,
+      title: candidacy.categoryTitle,
+      emoji: candidacy.categoryEmoji,
+    })
+  }
+
+  /**
+   * Envia a sugestão para o backend. Não otimizamos nada localmente: a
+   * sugestão é PRIVADA da caixa de entrada do alvo — o autor só verá o
+   * status depois em /api/suggestions/created. O toast confirma o envio.
+   */
+  async function handleSuggest({ target_username, pitch }) {
+    if (!suggestCategory) {
+      return { success: false, error: 'Nenhuma categoria selecionada' }
+    }
+
+    const res = await apiFetch('/api/suggestions', {
+      method: 'POST',
+      body: {
+        category_id: suggestCategory.id,
+        target_username,
+        pitch,
+      },
+      token: true,
+    })
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: extractErrorDetail(
+          res.data,
+          'Falha na comunicação com o cartório'
+        ),
+      }
+    }
+
+    showToast('Sugestão enviada — quem decide é o eleitor')
+    return { success: true }
   }
 
   function handleShare(candidacy) {
@@ -139,7 +197,7 @@ export default function CandidacyPage() {
 
             <div className="mt-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary-container/20 text-primary font-label-sm text-label-sm font-bold">
               <span className="material-symbols-outlined text-[16px]">how_to_vote</span>
-              {usedCount}/{maxCandidacies} Ativas
+              {usedCount} Ativas
             </div>
 
             {/* Aviso do Tribunal */}
@@ -160,11 +218,11 @@ export default function CandidacyPage() {
               </p>
             </div>
           )}
-          {!isClosed && remaining === 0 && (
+          {!isClosed && (
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-container-lowest/80 backdrop-blur-md border border-primary-container/30">
-              <span className="material-symbols-outlined text-primary text-[20px]">done_all</span>
+              <span className="material-symbols-outlined text-primary text-[20px]">all_inclusive</span>
               <p className="font-sans text-body-sm text-on-surface-variant">
-                Todas as {maxCandidacies} submissões utilizadas — dossiê completo.
+                Dossiê aberto — candidate-se em quantas categorias quiser (uma candidatura por categoria).
               </p>
             </div>
           )}
@@ -177,7 +235,7 @@ export default function CandidacyPage() {
                   <span className="material-symbols-outlined text-primary text-[20px]">how_to_reg</span>
                   <h2 className="font-sans font-bold text-title-md text-on-surface tracking-wide">Minhas Candidaturas Registradas</h2>
                   <span className="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary font-label-sm text-label-sm">
-                    {usedCount}/{maxCandidacies} Ativas
+                    {usedCount} Ativas
                   </span>
                 </div>
                 <p className="font-sans text-body-sm text-outline">
@@ -201,6 +259,7 @@ export default function CandidacyPage() {
                     isClosed={isClosed}
                     onEdit={openEdit}
                     onShare={handleShare}
+                    onSuggest={openSuggestFromCandidacy}
                   />
                 ))
               )}
@@ -251,14 +310,27 @@ export default function CandidacyPage() {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => openCreate(cat)}
-                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-bold text-body-md transition-all duration-300 shadow-[0_0_24px_rgba(212,175,55,0.35)] hover:shadow-[0_0_32px_rgba(212,175,55,0.55)] hover:scale-[1.01] active:scale-[0.99]"
-                    >
-                      <span>Candidatar-se ao Troféu</span>
-                      <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openCreate(cat)}
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-bold text-body-md transition-all duration-300 shadow-[0_0_24px_rgba(212,175,55,0.35)] hover:shadow-[0_0_32px_rgba(212,175,55,0.55)] hover:scale-[1.01] active:scale-[0.99]"
+                      >
+                        <span>Candidatar-se ao Troféu</span>
+                        <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
+                      </button>
+
+                      {/* Segundo botão (menor, ghost): sugerir OUTRA pessoa
+                          para esta categoria — o alvo decide depois. */}
+                      <button
+                        type="button"
+                        onClick={() => openSuggest(cat)}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-sans font-semibold text-body-sm transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">forward_to_inbox</span>
+                        <span>Sugerir para alguém</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -292,6 +364,14 @@ export default function CandidacyPage() {
         category={modalCategory}
         editing={modalEditing}
         onSubmit={handleSubmit}
+      />
+
+      {/* ---- Modal de sugestão de memória alheia ---- */}
+      <SuggestionModal
+        open={suggestOpen}
+        onClose={() => setSuggestOpen(false)}
+        category={suggestCategory}
+        onSubmit={handleSuggest}
       />
 
       {/* ---- Toast ---- */}

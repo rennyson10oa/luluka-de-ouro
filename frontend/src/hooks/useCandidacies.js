@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import apiFetch from '../utils/api'
-/** Limite de candidaturas por eleitor — espelha a regra que o BACKEND já cobra
- * (400 "Limit of 4 candidacies per user"). Aqui é só para a UX contar certo. */
-const MAX_CANDIDACIES = 4
 import useAuth from './useAuth'
 import useGalaState from './useGalaState'
 
@@ -70,9 +67,6 @@ function mapCandidacy(cand, category) {
 /** Converte o `detail` EN do backend em mensagem pt-BR da urna. */
 function mapCandidacyError(status, detail) {
   const text = String(detail || '')
-  if (status === 400 && text.includes('Limit of 4')) {
-    return 'Limite de candidaturas atingido: o dossiê está completo'
-  }
   if (status === 400 && text.includes('Already a candidate')) {
     return 'Você já tem candidatura registrada nesta categoria'
   }
@@ -136,7 +130,6 @@ export default function useCandidacies() {
   }, [load])
 
   const usedCount = candidacies.length
-  const remaining = Math.max(0, MAX_CANDIDACIES - usedCount)
 
   // Categorias sem candidatura do usuário (por categoryId) = "Vagas abertas".
   const usedCategoryIds = new Set(candidacies.map((c) => c.categoryId))
@@ -146,9 +139,6 @@ export default function useCandidacies() {
   const addCandidacy = useCallback(
     async (category, pitch) => {
       const trimmed = String(pitch || '').trim()
-      if (remaining <= 0) {
-        return { success: false, error: 'Limite de candidaturas atingido: o dossiê está completo' }
-      }
       if (trimmed.length < 1 || trimmed.length > 280) {
         return { success: false, error: 'O pitch deve ter entre 1 e 280 caracteres' }
       }
@@ -173,7 +163,7 @@ export default function useCandidacies() {
       setCandidacies((prev) => [...prev, mapCandidacy(res.data, category)])
       return { success: true }
     },
-    [candidacies, remaining]
+    [candidacies]
   )
 
   /** Retifica o pitch de uma candidatura existente (PUT). */
@@ -209,9 +199,7 @@ export default function useCandidacies() {
 
   return {
     candidacies,
-    maxCandidacies: MAX_CANDIDACIES,
     usedCount,
-    remaining,
     openCategories,
     addCandidacy,
     updatePitch,

@@ -28,7 +28,7 @@ export default function ProfileHeader({ user }) {
   const [uploading, setUploading] = useState(false)
   const objectUrlRef = useRef(null)
   const fileInputRef = useRef(null)
-  const { usedCount, maxCandidacies } = useCandidacies()
+  const { usedCount } = useCandidacies()
   // Contagem de votos REAIS do eleitor (GET /api/votes/me, Fase 2).
   const [myVotesCount, setMyVotesCount] = useState(null)
   // "Membro desde": registro real do cartório (users.created_at, exposto
@@ -257,7 +257,7 @@ export default function ProfileHeader({ user }) {
             <span className="material-symbols-outlined text-[16px] text-secondary">campaign</span>
           </div>
           <div className="font-serif font-bold text-headline-sm text-on-surface">{String(usedCount).padStart(2, '0')}</div>
-          <div className="text-label-sm text-secondary flex items-center gap-1 mt-0.5">de {maxCandidacies} submissões</div>
+          <div className="text-label-sm text-secondary flex items-center gap-1 mt-0.5">candidaturas ativas</div>
         </div>
         <div className="bg-surface-container/70 backdrop-blur-md rounded-xl p-3 shadow-sm">
           <div className="flex items-center justify-between text-on-surface-variant mb-1">

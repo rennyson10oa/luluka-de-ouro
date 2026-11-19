@@ -18,7 +18,7 @@ function formatSubmittedAt(iso) {
     : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function CandidacyCard({ candidacy, isClosed, onEdit, onShare }) {
+export default function CandidacyCard({ candidacy, isClosed, onEdit, onShare, onSuggest }) {
   const [expanded, setExpanded] = useState(false)
 
   // Descrição da categoria: a API não expõe esse campo (ADR-0002) — o card
@@ -131,6 +131,21 @@ export default function CandidacyCard({ candidacy, isClosed, onEdit, onShare }) 
             <span className="material-symbols-outlined text-[15px]">share</span>
             Compartilhar
           </button>
+
+          {/* Sugerir uma memória/pitch melhor para alguém nesta categoria.
+              Fica no card de "Minhas Candidaturas" porque o eleitor já está
+              dentro da categoria e pode lembrar de outra pessoa que merece. */}
+          {onSuggest && (
+            <button
+              type="button"
+              onClick={() => onSuggest(candidacy)}
+              disabled={isClosed}
+              title="Sugerir pitch melhor para esta categoria"
+              className="w-9 h-9 rounded-lg bg-surface-container-high hover:bg-surface-bright text-on-surface-variant hover:text-primary flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined text-[16px]">forward_to_inbox</span>
+            </button>
+          )}
 
           {/* Editar / Retificar (bloqueado com urnas fechadas) */}
           <button

@@ -67,6 +67,23 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
 def read_users_me(current_user: models.User = Depends(deps.get_current_user)):
     return current_user
 
+
+@router.get("/users/directory")
+def user_directory(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    """Diretório de eleitores REAIS para o seletor da sugestão (combobox).
+
+    Autenticado (a gala não publica a lista para visitantes); sem convidados
+    (nunca leriam a caixa de entrada). Usernames são públicos na gala (chat,
+    pódio) — aqui é só catálogo, sem email/senha/hash.
+    """
+    return [
+        {"id": u.id, "username": u.username, "vulgo": u.vulgo}
+        for u in crud.get_user_directory(db)
+    ]
+
 @router.patch("/users/me", response_model=schemas.ProfileUpdateResponse)
 def update_profile(update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(deps.get_current_user)):
     # Normalização: apenas strip de espaços (o frontend normaliza o resto).
@@ -204,11 +221,11 @@ def create_candidacy(candidacy: schemas.CandidacyCreate, db: Session = Depends(g
     settings = crud.get_settings(db)
     if not settings.votacao_aberta:
         raise HTTPException(status_code=403, detail="Voting is closed")
-    
-    # Limite de 4 candidaturas por eleitor — espelha a regra da cédula no frontend
-    limite = db.query(models.Candidacy).filter(models.Candidacy.user_id == current_user.id).count()
-    if limite >= 4:
-        raise HTTPException(status_code=400, detail="Limit of 4 candidacies per user")
+
+    # Sem limite de quantidade (decisão do dono): o eleitor concorre em
+    # TODAS as categorias que quiser. A regra dura é a unicidade por
+    # categoria — a checagem abaixo (e o UniqueConstraint) garantem
+    # uma única candidatura por categoria.
 
     existing = db.query(models.Candidacy).filter(
         models.Candidacy.category_id == candidacy.category_id,
@@ -258,6 +275,339 @@ def update_candidacy(candidacy_id: int, candidacy: schemas.CandidacyUpdate, db: 
         "user_id": current_user.id,
         "username": current_user.username
     }
+
+# ---------------------------------------------------------------------------
+# Sugestões de candidatura
+#
+# Fluxo: um eleitor lembra de uma situação de OUTRA pessoa e envia um pitch
+# sugerido; o alvo decide na caixa de entrada. Aceitar NUNCA cria uma segunda
+# candidatura do alvo na mesma categoria — substitui o pitch da existente ou
+# cria a primeira. Nenhum conteúdo de sugestão vai pelo SSE (privacidade);
+# só o broadcast de state.change quando uma candidatura nova nasce.
+# ---------------------------------------------------------------------------
+def _suggestion_received_payload(sug: models.CandidacySuggestion) -> dict:
+    """Serializa a caixa de entrada do alvo (nomes explícitos para o front).
+
+    Os relacionamentos são carregados com joinedload no CRUD; o fallback
+    protege contra um registro legado sem categoria/autor (nunca deveria
+    acontecer graças à cascata manual de exclusão).
+    """
+    return {
+        "id": sug.id,
+        "category_id": sug.category_id,
+        "category_title": sug.category.title if sug.category else f"#{sug.category_id}",
+        "category_emoji": sug.category.emoji if sug.category else "🏆",
+        "author_username": (
+            sug.author_user.username
+            if sug.author_user
+            else f"#{sug.author_user_id}"
+        ),
+        "pitch": sug.pitch,
+        "status": sug.status,
+        "created_at": sug.created_at,
+        "decided_at": sug.decided_at,
+    }
+
+
+def _suggestion_created_payload(sug: models.CandidacySuggestion) -> dict:
+    """Serializa o histórico de /created (visão do AUTOR)."""
+    return {
+        "id": sug.id,
+        "target_username": (
+            sug.target_user.username
+            if sug.target_user
+            else f"#{sug.target_user_id}"
+        ),
+        "category_title": sug.category.title if sug.category else f"#{sug.category_id}",
+        "pitch": sug.pitch,
+        "status": sug.status,
+        "decided_at": sug.decided_at,
+    }
+
+
+@router.post("/suggestions", status_code=status.HTTP_201_CREATED)
+def create_candidacy_suggestion(
+    payload: schemas.SuggestionCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    """Cria uma sugestão para OUTRO eleitor (alvo define aceitar/recusar).
+
+    A ordem das validações é intencional: identidade do alvo → categoria →
+    pitch → limites → duplicidade. Assim as mensagens de erro mais óbvias
+    (alvo inexistente/guest, categoria inexistente) aparecem antes de
+    qualquer regra de cota.
+    """
+    target = crud.get_user_by_username(db, payload.target_username.strip())
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if target.id == current_user.id:
+        raise HTTPException(
+            status_code=400, detail="Você não pode sugerir para você mesmo"
+        )
+
+    # Convidados (indicados pelo admin) não têm conta/login nem caixa de
+    # entrada; sugerir para eles seria uma mensagem para o vazio.
+    if target.is_guest:
+        raise HTTPException(
+            status_code=400, detail="Convidados não acessam a caixa de sugestões"
+        )
+
+    category = (
+        db.query(models.Category)
+        .filter(models.Category.id == payload.category_id)
+        .first()
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    # Pydantic já barra vazio e >280; aqui só descartamos espaços em branco.
+    pitch = (payload.pitch or "").strip()
+    if not pitch:
+        raise HTTPException(status_code=400, detail="Pitch não pode ser vazio")
+
+    if crud.count_pending_suggestions_by_author(db, current_user.id) >= 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Limite de 5 sugestões pendentes por autor",
+        )
+
+    if crud.count_pending_suggestions_for_pair(db, target.id, category.id) >= 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Este eleitor já tem 3 sugestões pendentes nesta categoria",
+        )
+
+    duplicada = crud.get_duplicate_pending_suggestion(
+        db,
+        author_user_id=current_user.id,
+        target_user_id=target.id,
+        category_id=category.id,
+        pitch=pitch,
+    )
+    if duplicada is not None:
+        raise HTTPException(status_code=400, detail="Sugestão duplicada")
+
+    suggestion = crud.create_suggestion(
+        db,
+        category_id=category.id,
+        target_user_id=target.id,
+        author_user_id=current_user.id,
+        pitch=pitch,
+    )
+
+    crud.record_audit(
+        db,
+        current_user.username,
+        "sugestao_enviada",
+        f"para @{target.username} em '{category.title}'",
+    )
+    # O commit da ata expira os atributos; refresh garante created_at na volta.
+    db.refresh(suggestion)
+
+    return {
+        "id": suggestion.id,
+        "category_id": suggestion.category_id,
+        "target_username": target.username,
+        "author_username": current_user.username,
+        "pitch": suggestion.pitch,
+        "status": suggestion.status,
+        "created_at": suggestion.created_at,
+    }
+
+
+@router.get(
+    "/suggestions/me", response_model=list[schemas.SuggestionReceived]
+)
+def my_received_suggestions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    """Caixa de entrada do alvo autenticado (pendentes primeiro).
+
+    O filtro é target_user_id == usuário do token e a rota de criação proíbe
+    auto-sugestão, então o alvo NUNCA vê sugestões dele mesmo como autor.
+    """
+    sugestoes = crud.get_suggestions_for_target(db, current_user.id)
+    return [_suggestion_received_payload(sug) for sug in sugestoes]
+
+
+@router.post("/suggestions/{suggestion_id}/accept")
+async def accept_candidacy_suggestion(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    """O ALVO aceita: substitui o pitch existente ou cria a candidatura.
+
+    Decisão central: a UniqueConstraint(category_id, user_id) de Candidacy
+    continua sendo a fonte da verdade — nunca há duas candidaturas do mesmo
+    usuário na categoria. O aceite é o único ponto que faz o "upsert".
+    """
+    suggestion = crud.get_suggestion(db, suggestion_id)
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+
+    # Só o alvo decide. 404 já foi checado acima para não vazar existência
+    # de sugestões alheias sem o dono correto.
+    if suggestion.target_user_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to decide this suggestion"
+        )
+
+    if suggestion.status != "pending":
+        raise HTTPException(status_code=400, detail="Sugestão já processada")
+
+    # Urnas fechadas = dossiê congelado: aceitar criaria/substituiria
+    # candidatura sem chance de voto, desalinhada do resto das rotas
+    # (POST /candidacies tem a MESMA regra). A sugestão segue pendente.
+    settings = crud.get_settings(db)
+    if not settings.votacao_aberta:
+        raise HTTPException(status_code=403, detail="Voting is closed")
+
+    category = (
+        db.query(models.Category)
+        .filter(models.Category.id == suggestion.category_id)
+        .first()
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    author = crud.get_user(db, suggestion.author_user_id)
+    author_username = (
+        author.username if author else f"#{suggestion.author_user_id}"
+    )
+
+    # Upsert manual: preserva o id da candidatura quando ela já existe (votos
+    # e pódio continuam apontando para o mesmo registro; só o pitch muda).
+    existing = (
+        db.query(models.Candidacy)
+        .filter(
+            models.Candidacy.category_id == category.id,
+            models.Candidacy.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    criou_candidatura = False
+    if existing is not None:
+        existing.pitch = suggestion.pitch
+        db.commit()
+        db.refresh(existing)
+        candidacy = existing
+    else:
+        # Sem limite de quantidade (decisão do dono, alinhado ao POST
+        # /candidacies): a regra dura continua sendo 1 candidatura
+        # por categoria (unique constraint + checagem acima).
+
+        candidacy = models.Candidacy(
+            category_id=category.id,
+            user_id=current_user.id,
+            pitch=suggestion.pitch,
+        )
+        db.add(candidacy)
+        db.commit()
+        db.refresh(candidacy)
+        criou_candidatura = True
+
+    suggestion.status = "accepted"
+    suggestion.decided_at = datetime.now()
+    db.commit()
+    db.refresh(suggestion)
+
+    # Dois lados na ata: o alvo registra a origem da candidatura; o autor vê
+    # que a memória dele foi aceita.
+    crud.record_audit(
+        db,
+        current_user.username,
+        "candidatura_aceita_de_sugestao",
+        f"sugestão de @{author_username} em '{category.title}'",
+    )
+    crud.record_audit(
+        db,
+        author_username,
+        "sugestao_aceita",
+        f"por @{current_user.username} em '{category.title}'",
+    )
+
+    # Candidatura é pública → o total pode ir pelo SSE. O CONTEÚDO da sugestão
+    # (pitch/autor) NUNCA entra no evento (privacidade da caixa de entrada).
+    if criou_candidatura:
+        await events.hub.broadcast(
+            "state.change", {"total_candidatos": crud.get_total_candidatos(db)}
+        )
+
+    return {
+        "id": candidacy.id,
+        "pitch": candidacy.pitch,
+        "user_id": candidacy.user_id,
+        "username": current_user.username,
+        "category_id": candidacy.category_id,
+    }
+
+
+@router.post(
+    "/suggestions/{suggestion_id}/reject",
+    response_model=schemas.SuggestionDecision,
+)
+def reject_candidacy_suggestion(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    """O ALVO recusa. A rejeição fica VISÍVEL ao autor (sem feedback de texto)."""
+    suggestion = crud.get_suggestion(db, suggestion_id)
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+
+    if suggestion.target_user_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to decide this suggestion"
+        )
+
+    if suggestion.status != "pending":
+        raise HTTPException(status_code=400, detail="Sugestão já processada")
+
+    category = (
+        db.query(models.Category)
+        .filter(models.Category.id == suggestion.category_id)
+        .first()
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    author = crud.get_user(db, suggestion.author_user_id)
+    author_username = (
+        author.username if author else f"#{suggestion.author_user_id}"
+    )
+
+    suggestion.status = "rejected"
+    suggestion.decided_at = datetime.now()
+    db.commit()
+    db.refresh(suggestion)
+
+    crud.record_audit(
+        db,
+        current_user.username,
+        "sugestao_rejeitada",
+        f"de @{author_username} em '{category.title}'",
+    )
+
+    return {"status": suggestion.status}
+
+
+@router.get(
+    "/suggestions/created", response_model=list[schemas.SuggestionCreated]
+)
+def my_created_suggestions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    """Histórico do AUTOR (inclui aceitas e rejeitadas — rejeição é visível)."""
+    sugestoes = crud.get_suggestions_by_author(db, current_user.id)
+    return [_suggestion_created_payload(sug) for sug in sugestoes]
+
 
 @router.post("/votes")
 async def cast_vote(vote: schemas.VoteCreate, db: Session = Depends(get_db), current_user: models.User = Depends(deps.get_current_user)):

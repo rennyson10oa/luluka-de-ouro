@@ -6,6 +6,7 @@ import useAuth from '../../hooks/useAuth'
 import useGalaState from '../../hooks/useGalaState'
 import useGalaEvents from '../../hooks/useGalaEvents'
 import apiFetch, { extractErrorDetail } from '../../utils/api'
+import UserPicker from '../../components/UserPicker'
 
 /**
  * AdminPanel — Painel de Controle Soberano da Academia.
@@ -51,6 +52,11 @@ const AUDIT_LABELS = {
   usuario_excluido: 'Usuário excluído',
   agendamento_alterado: 'Agendamento alterado',
   cerimonia_comando: 'Comando de cerimônia',
+  // Ações do sistema de sugestão de candidatura (caixa de entrada do alvo).
+  sugestao_enviada: 'Sugestão enviada',
+  sugestao_aceita: 'Sugestão aceita',
+  sugestao_rejeitada: 'Sugestão rejeitada',
+  candidatura_aceita_de_sugestao: 'Candidatura via sugestão',
 }
 
 // Registros por página na ata. Paginação CLIENT-SIDE de propósito: a ata
@@ -136,10 +142,10 @@ function NomineeRow({ nominee, onRemove }) {
   )
 }
 
-function CategoryCard({ category, onEdit, onDelete, onAddNominee, onRemoveNominee }) {
+function CategoryCard({ category, onEdit, onDelete, onAddNominee, onRemoveNominee, userOptions }) {
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [username, setUsername] = useState('')
+  const [picked, setPicked] = useState(null) // { username, vulgo, is_guest }
   const [pitch, setPitch] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -148,13 +154,13 @@ function CategoryCard({ category, onEdit, onDelete, onAddNominee, onRemoveNomine
 
   async function submitNominee(e) {
     e.preventDefault()
-    const label = username.trim()
+    const label = picked?.username
     if (!label) return
     setSaving(true)
     const ok = await onAddNominee(category.id, label, pitch.trim())
     setSaving(false)
     if (ok) {
-      setUsername('')
+      setPicked(null)
       setPitch('')
       setAdding(false)
     }
@@ -230,13 +236,13 @@ function CategoryCard({ category, onEdit, onDelete, onAddNominee, onRemoveNomine
               onSubmit={submitNominee}
               className="flex flex-col gap-2 p-3 rounded-xl bg-surface-container-lowest/60 border border-primary/20"
             >
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username do indicado (ex.: BetoChave)"
-                maxLength={30}
-                className="w-full rounded-lg bg-surface-container-lowest/90 text-on-surface px-3.5 py-2 font-sans text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-inner border border-outline-variant/40 focus:border-primary/50 transition-all"
+              {/* Seletor com busca (mesmo UserPicker da sugestão): o admin
+                  escolhe entre os usuários reais registrados no cartório —
+                  inclusive CONVIDADOS (badge), que podem receber candidatura. */}
+              <UserPicker
+                options={userOptions}
+                value={picked}
+                onChange={setPicked}
               />
               <textarea
                 value={pitch}
@@ -259,7 +265,7 @@ function CategoryCard({ category, onEdit, onDelete, onAddNominee, onRemoveNomine
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || !username.trim()}
+                  disabled={saving || !picked}
                   className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-primary-fixed via-primary to-primary-container text-on-primary font-sans font-semibold text-body-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
                   {saving ? 'Salvando...' : 'Adicionar'}
@@ -1008,6 +1014,7 @@ export default function AdminPanel() {
                 onDelete={deleteCategory}
                 onAddNominee={addNominee}
                 onRemoveNominee={removeNominee}
+                userOptions={users}
               />
             ))}
           </section>

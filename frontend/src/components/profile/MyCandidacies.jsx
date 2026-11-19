@@ -7,7 +7,7 @@ import useCandidacies from '../../hooks/useCandidacies'
  * dados da Urna de Candidaturas (/candidaturas).
  */
 export default function MyCandidacies({ onToast }) {
-  const { candidacies, usedCount, maxCandidacies, remaining, shareText } = useCandidacies()
+  const { candidacies, usedCount, shareText } = useCandidacies()
 
   function handleShare(c) {
     const text = shareText(c)
@@ -33,7 +33,7 @@ export default function MyCandidacies({ onToast }) {
           <h3 className="font-serif font-bold text-headline-sm text-on-surface">Minhas Candidaturas Homologadas</h3>
         </div>
         <span className="text-label-sm text-on-surface-variant bg-surface-container-high px-3 py-1 rounded-full w-fit">
-          {usedCount} de {maxCandidacies} submissões utilizadas
+          {usedCount} candidaturas ativas
         </span>
       </div>
 
@@ -105,10 +105,10 @@ export default function MyCandidacies({ onToast }) {
           </div>
           <div>
             <h4 className="font-serif font-bold text-title-md text-on-surface">
-              {remaining > 0 ? `Ainda restam ${remaining} candidaturas livres!` : 'Dossiê completo — todas as submissões utilizadas!'}
+              O dossiê está aberto — concorra em quantas categorias quiser!
             </h4>
             <p className="font-sans text-body-sm text-on-surface-variant">
-              {remaining > 0 ? 'Lance seu nome antes do encerramento das urnas.' : 'A Urna de Candidaturas está com o dossiê fechado.'}
+              Uma candidatura por categoria. Lance seu nome antes do encerramento das urnas.
             </p>
           </div>
         </div>

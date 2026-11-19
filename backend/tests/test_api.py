@@ -85,7 +85,8 @@ def test_results_hidden_before_reveal(client, db_session):
 
 
 def test_candidacy_limit_four_per_user(client, db_session):
-    # Usuário candidato em 4 categorias distintas → a 5ª deve ser bloqueada.
+    # Decisão do dono: SEM limite de quantidade — o eleitor concorre em
+    # TODAS as categorias. A regra dura é a unicidade por categoria.
     response = client.post("/api/register", json={"username": "candlimit", "password": "123"})
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -99,8 +100,8 @@ def test_candidacy_limit_four_per_user(client, db_session):
     for cat in cats:
         db_session.refresh(cat)
 
-    # As 4 primeiras candidaturas são aceitas (201).
-    for i in range(4):
+    # Candidaturas em categorias DISTINTAS são todas aceitas (201).
+    for i in range(5):
         resp = client.post(
             "/api/candidacies",
             json={"category_id": cats[i].id, "pitch": f"Pitch {i}"},
@@ -108,14 +109,14 @@ def test_candidacy_limit_four_per_user(client, db_session):
         )
         assert resp.status_code == 201, resp.text
 
-    # A 5ª candidatura deve retornar 400 pelo limite server-side.
+    # Segunda candidatura na MESMA categoria → 400 pela unicidade.
     resp = client.post(
         "/api/candidacies",
-        json={"category_id": cats[4].id, "pitch": "Pitch 5"},
+        json={"category_id": cats[0].id, "pitch": "Pitch duplicado"},
         headers=headers,
     )
     assert resp.status_code == 400
-    assert resp.json()["detail"] == "Limit of 4 candidacies per user"
+    assert resp.json()["detail"] == "Already a candidate in this category"
 
 
 def test_upload_avatar_png_valido(client, db_session):
@@ -594,3 +595,343 @@ def test_audit_me(client, db_session):
 
     # Sem sessão, a ata pessoal é fechada.
     assert client.get("/api/audit/me").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Sugestões de candidatura
+# ---------------------------------------------------------------------------
+def _create_category(db_session, title: str, reveal_order: int = 1):
+    """Categoria direto no banco: evita depender do CRUD de admin no teste."""
+    cat = models.Category(
+        title=title, emoji="🎯", reveal_order=reveal_order, modo="aberta"
+    )
+    db_session.add(cat)
+    db_session.commit()
+    db_session.refresh(cat)
+    return cat
+
+
+def test_suggestion_full_flow(client, db_session):
+    """A sugere para B → B vê na caixa → aceita → candidatura + ata."""
+    headers_a = _user_headers(client, "sugflow_a")
+    headers_b = _user_headers(client, "sugflow_b")
+    id_b = client.get("/api/me", headers=headers_b).json()["id"]
+    cat = _create_category(db_session, "Sugestão Fluxo", reveal_order=30)
+
+    enviada = client.post(
+        "/api/suggestions",
+        json={
+            "category_id": cat.id,
+            "target_username": "sugflow_b",
+            "pitch": "Ele quebrou o grupo em 2019",
+        },
+        headers=headers_a,
+    )
+    assert enviada.status_code == 201, enviada.text
+    corpo = enviada.json()
+    assert corpo["target_username"] == "sugflow_b"
+    assert corpo["author_username"] == "sugflow_a"
+    assert corpo["status"] == "pending"
+    assert corpo["created_at"] is not None
+    sugestao_id = corpo["id"]
+
+    # Caixa de entrada do ALVO (e não do autor).
+    caixa_b = client.get("/api/suggestions/me", headers=headers_b)
+    assert caixa_b.status_code == 200, caixa_b.text
+    item = next(s for s in caixa_b.json() if s["id"] == sugestao_id)
+    assert item["category_title"] == "Sugestão Fluxo"
+    assert item["category_emoji"] == "🎯"
+    assert item["author_username"] == "sugflow_a"
+    assert item["status"] == "pending"
+    assert client.get("/api/suggestions/me", headers=headers_a).json() == []
+
+    # B aceita → candidatura criada com o pitch sugerido.
+    aceite = client.post(
+        f"/api/suggestions/{sugestao_id}/accept", headers=headers_b
+    )
+    assert aceite.status_code == 200, aceite.text
+    candidatura = aceite.json()
+    assert candidatura["user_id"] == id_b
+    assert candidatura["username"] == "sugflow_b"
+    assert candidatura["category_id"] == cat.id
+    assert candidatura["pitch"] == "Ele quebrou o grupo em 2019"
+
+    # Sugestão decidida aparece como accepted na caixa do alvo.
+    caixa_b = client.get("/api/suggestions/me", headers=headers_b).json()
+    decidida = next(s for s in caixa_b if s["id"] == sugestao_id)
+    assert decidida["status"] == "accepted"
+    assert decidida["decided_at"] is not None
+
+    # A candidatura é pública e única na categoria.
+    publicas = client.get("/api/categories").json()
+    cat_publica = next(c for c in publicas if c["id"] == cat.id)
+    minhas = [c for c in cat_publica["candidacies"] if c["user_id"] == id_b]
+    assert len(minhas) == 1
+    assert minhas[0]["pitch"] == "Ele quebrou o grupo em 2019"
+
+    # Contador global de candidatos reflete a criação.
+    estado = client.get("/api/state").json()
+    assert estado["total_candidatos"] == 1
+
+    # Ata: os DOIS lados ficaram registrados.
+    ata = client.get("/api/admin/audit", headers=_admin_headers(client)).json()
+    assert any(
+        r["actor"] == "sugflow_b"
+        and r["action"] == "candidatura_aceita_de_sugestao"
+        and "sugflow_a" in r["detail"]
+        for r in ata
+    )
+    assert any(
+        r["actor"] == "sugflow_a"
+        and r["action"] == "sugestao_aceita"
+        and "sugflow_b" in r["detail"]
+        for r in ata
+    )
+    assert any(
+        r["actor"] == "sugflow_a" and r["action"] == "sugestao_enviada"
+        for r in ata
+    )
+
+    # Histórico do autor também enxerga a decisão.
+    criadas = client.get("/api/suggestions/created", headers=headers_a).json()
+    criada = next(s for s in criadas if s["id"] == sugestao_id)
+    assert criada["status"] == "accepted"
+    assert criada["target_username"] == "sugflow_b"
+
+
+def test_suggestion_accept_replaces_existing_pitch(client, db_session):
+    """B já concorre: aceitar SUBSTITUI o pitch e preserva o id (sem 2ª candidatura)."""
+    headers_a = _user_headers(client, "sugrep_a")
+    headers_b = _user_headers(client, "sugrep_b")
+    id_b = client.get("/api/me", headers=headers_b).json()["id"]
+    cat = _create_category(db_session, "Sugestão Replace", reveal_order=31)
+
+    original = client.post(
+        "/api/candidacies",
+        json={"category_id": cat.id, "pitch": "pitch antigo do B"},
+        headers=headers_b,
+    )
+    assert original.status_code == 201, original.text
+    candidacy_id = original.json()["id"]
+
+    enviada = client.post(
+        "/api/suggestions",
+        json={
+            "category_id": cat.id,
+            "target_username": "sugrep_b",
+            "pitch": "pitch novo lembrado por A",
+        },
+        headers=headers_a,
+    )
+    assert enviada.status_code == 201, enviada.text
+
+    aceite = client.post(
+        f"/api/suggestions/{enviada.json()['id']}/accept", headers=headers_b
+    )
+    assert aceite.status_code == 200, aceite.text
+    # Id preservado: é a MESMA candidatura, só com pitch novo.
+    assert aceite.json()["id"] == candidacy_id
+    assert aceite.json()["pitch"] == "pitch novo lembrado por A"
+
+    publicas = client.get("/api/categories").json()
+    cat_publica = next(c for c in publicas if c["id"] == cat.id)
+    minhas = [c for c in cat_publica["candidacies"] if c["user_id"] == id_b]
+    assert len(minhas) == 1
+    assert minhas[0]["id"] == candidacy_id
+    assert minhas[0]["pitch"] == "pitch novo lembrado por A"
+
+
+def test_suggestion_self_and_guest_blocked(client, db_session):
+    headers_a = _user_headers(client, "sugself_a")
+    cat = _create_category(db_session, "Sugestão Self", reveal_order=32)
+
+    self_resp = client.post(
+        "/api/suggestions",
+        json={
+            "category_id": cat.id,
+            "target_username": "sugself_a",
+            "pitch": "eu mesmo",
+        },
+        headers=headers_a,
+    )
+    assert self_resp.status_code == 400
+    assert self_resp.json()["detail"] == "Você não pode sugerir para você mesmo"
+
+    # Convidado (indicado sem conta) não tem caixa de entrada.
+    convidado = models.User(
+        username="sugguest_alvo", password_hash="x", is_guest=True
+    )
+    db_session.add(convidado)
+    db_session.commit()
+
+    guest_resp = client.post(
+        "/api/suggestions",
+        json={
+            "category_id": cat.id,
+            "target_username": "sugguest_alvo",
+            "pitch": "memória",
+        },
+        headers=headers_a,
+    )
+    assert guest_resp.status_code == 400
+    assert (
+        guest_resp.json()["detail"]
+        == "Convidados não acessam a caixa de sugestões"
+    )
+
+
+def test_suggestion_limits_pending(client, db_session):
+    headers_a = _user_headers(client, "suglim_a")
+    _user_headers(client, "suglim_b")
+
+    # Limite de 3 pendentes por par (alvo, categoria) — de qualquer autor.
+    cat1 = _create_category(db_session, "Limite Par", reveal_order=33)
+    for i in range(3):
+        resp = client.post(
+            "/api/suggestions",
+            json={
+                "category_id": cat1.id,
+                "target_username": "suglim_b",
+                "pitch": f"memória {i}",
+            },
+            headers=headers_a,
+        )
+        assert resp.status_code == 201, resp.text
+
+    quarta = client.post(
+        "/api/suggestions",
+        json={
+            "category_id": cat1.id,
+            "target_username": "suglim_b",
+            "pitch": "memória 4",
+        },
+        headers=headers_a,
+    )
+    assert quarta.status_code == 400
+    assert (
+        quarta.json()["detail"]
+        == "Este eleitor já tem 3 sugestões pendentes nesta categoria"
+    )
+
+    # Limite de 5 pendentes por AUTOR: mais 2 em categorias novas = 5 no total.
+    for i, ordem in enumerate((34, 35), start=1):
+        cat = _create_category(db_session, f"Limite Autor {i}", reveal_order=ordem)
+        resp = client.post(
+            "/api/suggestions",
+            json={
+                "category_id": cat.id,
+                "target_username": "suglim_b",
+                "pitch": f"outra memória {i}",
+            },
+            headers=headers_a,
+        )
+        assert resp.status_code == 201, resp.text
+
+    cat6 = _create_category(db_session, "Limite Autor 6", reveal_order=36)
+    sexta = client.post(
+        "/api/suggestions",
+        json={
+            "category_id": cat6.id,
+            "target_username": "suglim_b",
+            "pitch": "memória excedente",
+        },
+        headers=headers_a,
+    )
+    assert sexta.status_code == 400
+    assert (
+        sexta.json()["detail"] == "Limite de 5 sugestões pendentes por autor"
+    )
+
+
+def test_suggestion_reject_and_authorization(client, db_session):
+    headers_a = _user_headers(client, "sugrej_a")
+    headers_b = _user_headers(client, "sugrej_b")
+    headers_c = _user_headers(client, "sugrej_c")
+    cat = _create_category(db_session, "Sugestão Rejeição", reveal_order=37)
+
+    enviada = client.post(
+        "/api/suggestions",
+        json={
+            "category_id": cat.id,
+            "target_username": "sugrej_b",
+            "pitch": "memória rejeitável",
+        },
+        headers=headers_a,
+    )
+    assert enviada.status_code == 201, enviada.text
+    sugestao_id = enviada.json()["id"]
+
+    # Sem sessão → 401; quem não é o alvo → 403.
+    assert (
+        client.post(f"/api/suggestions/{sugestao_id}/accept").status_code == 401
+    )
+    fora_do_alvo = client.post(
+        f"/api/suggestions/{sugestao_id}/accept", headers=headers_c
+    )
+    assert fora_do_alvo.status_code == 403
+
+    # O alvo rejeita: status rejected e visível ao autor em /created.
+    rejeitada = client.post(
+        f"/api/suggestions/{sugestao_id}/reject", headers=headers_b
+    )
+    assert rejeitada.status_code == 200, rejeitada.text
+    assert rejeitada.json() == {"status": "rejected"}
+
+    criadas = client.get("/api/suggestions/created", headers=headers_a).json()
+    item = next(s for s in criadas if s["id"] == sugestao_id)
+    assert item["status"] == "rejected"
+    assert item["decided_at"] is not None
+
+    # Sugestão já processada não pode ser aceita depois.
+    aceite_tardio = client.post(
+        f"/api/suggestions/{sugestao_id}/accept", headers=headers_b
+    )
+    assert aceite_tardio.status_code == 400
+    assert aceite_tardio.json()["detail"] == "Sugestão já processada"
+
+
+# ---------------------------------------------------------------------------
+# Sugestão de candidatura: urnas fechadas congelam o dossiê
+# ---------------------------------------------------------------------------
+def test_suggestion_accept_requires_open_voting(client, db_session):
+    headers_a = _user_headers(client, "sugclose_a")
+    headers_b = _user_headers(client, "sugclose_b")
+    admin_headers = _admin_headers(client)
+
+    categoria = client.post(
+        "/api/admin/categories",
+        json={"title": "Sugestão Fechada", "emoji": "🛑", "modo": "aberta", "reveal_order": 8},
+        headers=admin_headers,
+    ).json()
+
+    criada = client.post(
+        "/api/suggestions",
+        json={"category_id": categoria["id"], "target_username": "sugclose_b", "pitch": "memória"},
+        headers=headers_a,
+    )
+    assert criada.status_code == 201, criada.text
+
+    # Fecha as urnas.
+    fechou = client.put(
+        "/api/admin/settings", json={"votacao_aberta": False}, headers=admin_headers
+    )
+    assert fechou.status_code == 200, fechou.text
+
+    # Aceitar com urnas fechadas → 403 (mesma regra do POST /candidacies).
+    aceito = client.post(
+        f"/api/suggestions/{criada.json()['id']}/accept", headers=headers_b
+    )
+    assert aceito.status_code == 403
+    assert aceito.json()["detail"] == "Voting is closed"
+
+    # A sugestão continua PENDENTE (reabrir as urnas destrava a decisão).
+    inbox = client.get("/api/suggestions/me", headers=headers_b)
+    pendentes = [s for s in inbox.json() if s["status"] == "pending"]
+    assert len(pendentes) == 1
+
+    # Rejeitar com urna fechada é PERMITIDO: recusar não muda o dossiê.
+    rejeitada = client.post(
+        f"/api/suggestions/{criada.json()['id']}/reject", headers=headers_b
+    )
+    assert rejeitada.status_code == 200
+    assert rejeitada.json()["status"] == "rejected"

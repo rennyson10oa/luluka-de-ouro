@@ -5,6 +5,7 @@ import Header from '../components/Header'
 import { Footer } from '../components/Footer'
 import ProfileHeader from '../components/profile/ProfileHeader'
 import AccountSettings from '../components/profile/AccountSettings'
+import SuggestionInbox from '../components/profile/SuggestionInbox'
 import MyCandidacies from '../components/profile/MyCandidacies'
 import ActivityTimeline from '../components/profile/ActivityTimeline'
 
@@ -87,6 +88,10 @@ export default function ProfilePage() {
           {/* ---- Coluna direita ---- */}
           <section className="xl:col-span-7 flex flex-col gap-6">
             <AccountSettings user={user} onToast={showToast} />
+            {/* Caixa de entrada das sugestões feitas por OUTRAS pessoas:
+                aceitar substitui/cria a candidatura; recusar é decisão local
+                do alvo (o autor vê o status depois). */}
+            <SuggestionInbox onToast={showToast} />
             <MyCandidacies onToast={showToast} />
           </section>
         </div>

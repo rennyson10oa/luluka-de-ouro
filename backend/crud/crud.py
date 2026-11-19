@@ -2,14 +2,26 @@ import json
 import secrets
 from datetime import datetime
 
-from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import case, func, or_
 from backend.models import models
 from backend.schemas import schemas
 from backend.core.security import get_password_hash
 
 def get_user(db: Session, user_id: int):
     return db.query(models.User).filter(models.User.id == user_id).first()
+
+def get_user_directory(db: Session):
+    """Lista de eleitores REAIS para o seletor de sugestões (sem convidados:
+    convidado nunca abre a caixa de entrada, sugerir para ele é sugestão pro
+    limbo). Ordenado por username — o combobox filtra no cliente.
+    """
+    return (
+        db.query(models.User)
+        .filter(models.User.is_guest == False)  # noqa: E712 — SQLAlchemy precisa do ==
+        .order_by(models.User.username)
+        .all()
+    )
 
 def get_user_by_username(db: Session, username: str):
     return db.query(models.User).filter(models.User.username == username).first()
@@ -129,6 +141,129 @@ def get_total_users(db: Session):
 
 def get_total_candidatos(db: Session):
     return db.query(models.Candidacy).count()
+
+# ---------------------------------------------------------------------------
+# Sugestões de candidatura
+# ---------------------------------------------------------------------------
+def create_suggestion(
+    db: Session,
+    category_id: int,
+    target_user_id: int,
+    author_user_id: int,
+    pitch: str,
+):
+    """Persiste a sugestão já validada pela rota (limites/duplicidade)."""
+    db_suggestion = models.CandidacySuggestion(
+        category_id=category_id,
+        target_user_id=target_user_id,
+        author_user_id=author_user_id,
+        pitch=pitch,
+        status="pending",
+    )
+    db.add(db_suggestion)
+    db.commit()
+    db.refresh(db_suggestion)
+    return db_suggestion
+
+
+def get_suggestion(db: Session, suggestion_id: int):
+    return (
+        db.query(models.CandidacySuggestion)
+        .filter(models.CandidacySuggestion.id == suggestion_id)
+        .first()
+    )
+
+
+def count_pending_suggestions_by_author(db: Session, author_user_id: int) -> int:
+    """Limite de 5 pendentes por AUTOR (decisão do dono)."""
+    return int(
+        db.query(models.CandidacySuggestion)
+        .filter(
+            models.CandidacySuggestion.author_user_id == author_user_id,
+            models.CandidacySuggestion.status == "pending",
+        )
+        .count()
+    )
+
+
+def count_pending_suggestions_for_pair(
+    db: Session, target_user_id: int, category_id: int
+) -> int:
+    """Limite de 3 pendentes por par (ALVO, CATEGORIA), de qualquer autor."""
+    return int(
+        db.query(models.CandidacySuggestion)
+        .filter(
+            models.CandidacySuggestion.target_user_id == target_user_id,
+            models.CandidacySuggestion.category_id == category_id,
+            models.CandidacySuggestion.status == "pending",
+        )
+        .count()
+    )
+
+
+def get_duplicate_pending_suggestion(
+    db: Session,
+    author_user_id: int,
+    target_user_id: int,
+    category_id: int,
+    pitch: str,
+):
+    """Sugestão pendente idêntica do MESMO autor (alvo+categoria+pitch)."""
+    return (
+        db.query(models.CandidacySuggestion)
+        .filter(
+            models.CandidacySuggestion.author_user_id == author_user_id,
+            models.CandidacySuggestion.target_user_id == target_user_id,
+            models.CandidacySuggestion.category_id == category_id,
+            models.CandidacySuggestion.pitch == pitch,
+            models.CandidacySuggestion.status == "pending",
+        )
+        .first()
+    )
+
+
+def get_suggestions_for_target(db: Session, target_user_id: int):
+    """Caixa de entrada do alvo: pendentes primeiro, recentes primeiro.
+
+    O `case` resolve o agrupamento no próprio banco (sem sort Python) e o id
+    desempata created_at no mesmo segundo — mesma estratégia do chat/ata.
+    """
+    pendente_primeiro = case(
+        (models.CandidacySuggestion.status == "pending", 0), else_=1
+    )
+    return (
+        db.query(models.CandidacySuggestion)
+        # joinedload evita N+1 ao montar categoria/autor de cada item.
+        .options(
+            joinedload(models.CandidacySuggestion.category),
+            joinedload(models.CandidacySuggestion.author_user),
+        )
+        .filter(models.CandidacySuggestion.target_user_id == target_user_id)
+        .order_by(
+            pendente_primeiro,
+            models.CandidacySuggestion.created_at.desc(),
+            models.CandidacySuggestion.id.desc(),
+        )
+        .all()
+    )
+
+
+def get_suggestions_by_author(db: Session, author_user_id: int):
+    """Histórico do autor: mais recentes primeiro (mesmo shape de /created)."""
+    return (
+        db.query(models.CandidacySuggestion)
+        .options(
+            joinedload(models.CandidacySuggestion.category),
+            joinedload(models.CandidacySuggestion.target_user),
+        )
+        .filter(models.CandidacySuggestion.author_user_id == author_user_id)
+        .order_by(
+            models.CandidacySuggestion.created_at.desc(),
+            models.CandidacySuggestion.id.desc(),
+        )
+        .all()
+    )
+
 
 # ---------------------------------------------------------------------------
 # Chat
@@ -270,6 +405,11 @@ def delete_category(db: Session, category_id: int) -> bool:
     db.query(models.Vote).filter(models.Vote.category_id == category_id).delete(
         synchronize_session=False
     )
+    # Sugestões apontam para a categoria: sem isso a caixa de entrada ficaria
+    # com itens órfãos (categoria inexistente) após um DELETE administrativo.
+    db.query(models.CandidacySuggestion).filter(
+        models.CandidacySuggestion.category_id == category_id
+    ).delete(synchronize_session=False)
     db.query(models.Candidacy).filter(
         models.Candidacy.category_id == category_id
     ).delete(synchronize_session=False)
@@ -479,6 +619,15 @@ def delete_user_cascade(db: Session, user) -> None:
     # Candidaturas do usuário (o pódio não pode apontar para quem não existe).
     db.query(models.Candidacy).filter(
         models.Candidacy.user_id == user_id
+    ).delete(synchronize_session=False)
+
+    # Sugestões em que ele é AUTOR ou ALVO: a caixa de entrada não pode manter
+    # referências a um usuário excluído (o histórico é do par, não da conta).
+    db.query(models.CandidacySuggestion).filter(
+        or_(
+            models.CandidacySuggestion.author_user_id == user_id,
+            models.CandidacySuggestion.target_user_id == user_id,
+        )
     ).delete(synchronize_session=False)
 
     db.expunge(user)

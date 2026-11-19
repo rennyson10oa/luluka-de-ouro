@@ -128,6 +128,53 @@ class NomineeCreate(BaseModel):
     username: str = Field(..., min_length=1, max_length=30)
     pitch: str = Field("", max_length=280)
 
+class SuggestionCreate(BaseModel):
+    """Body do POST /api/suggestions.
+
+    Pitch com 1..280 já é barrado aqui (422); strings só com espaços são
+    checadas na rota (400) porque o Pydantic não faz trim sozinho.
+    """
+
+    category_id: int
+    target_username: str = Field(..., min_length=1, max_length=30)
+    pitch: str = Field(..., min_length=1, max_length=280)
+
+
+class SuggestionReceived(BaseModel):
+    """Item da caixa de entrada do ALVO (GET /api/suggestions/me).
+
+    Inclui ACEITAS e REJEITADAS: a rejeição é visível ao autor (decisão do
+    dono) e o alvo também enxerga o histórico do que já decidiu.
+    """
+
+    id: int
+    category_id: int
+    category_title: str
+    category_emoji: str
+    author_username: str
+    pitch: str
+    status: str
+    created_at: Optional[datetime] = None
+    decided_at: Optional[datetime] = None
+
+
+class SuggestionCreated(BaseModel):
+    """Item de GET /api/suggestions/created (histórico do AUTOR)."""
+
+    id: int
+    target_username: str
+    category_title: str
+    pitch: str
+    status: str
+    decided_at: Optional[datetime] = None
+
+
+class SuggestionDecision(BaseModel):
+    """Resposta do POST /api/suggestions/{id}/reject."""
+
+    status: str
+
+
 class AuditLogResponse(BaseModel):
     id: int
     actor: str
